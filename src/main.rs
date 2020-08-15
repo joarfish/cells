@@ -25,7 +25,6 @@ struct RendererState {
     queue: wgpu::Queue,
     sc_desc: wgpu::SwapChainDescriptor,
     swap_chain: wgpu::SwapChain,
-    objects: std::vec::Vec<StaticMeshObject>,
     object_types : std::vec::Vec<RenderObject> 
 }
 
@@ -82,25 +81,6 @@ impl RendererState {
 
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
-        let triangle = StaticMeshObject::new(
-            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: None,
-                contents: bytemuck::cast_slice(&[
-                    Vertex::new([0.0, 0.5, 0.0], [1.0, 0.0, 0.0]),
-                    Vertex::new([-0.5, -0.5, 0.0], [0.0, 1.0, 0.0]),
-                    Vertex::new([0.5, -0.5, 0.0], [0.0, 0.0, 1.0]),
-                ]),
-                usage: wgpu::BufferUsage::VERTEX
-            }),
-            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: None,
-                contents: bytemuck::cast_slice(&[
-                    0 as u16,1,2
-                ]),
-                usage: wgpu::BufferUsage::INDEX
-            })
-        );
-
         let static_mesh_type = StaticMesh::new(&device, sc_desc.format);
 
         RendererState {
@@ -112,92 +92,17 @@ impl RendererState {
             queue,
             sc_desc,
             swap_chain,
-            objects: vec![triangle],
             object_types: vec![
                 RenderObject::StaticMesh(static_mesh_type)
             ]
         }
     }
-
-    /*fn render(&mut self) {
-        match self {
-            RendererState::Initialized {
-                instance,
-                size,
-                surface,
-                adapter,
-                device,
-                queue,
-                sc_desc,
-                swap_chain,
-                objects,
-                object_types,
-            } => {
-
-                let screen_frame = swap_chain.get_current_frame().expect("Failed to acquire next swap chain texture!");
-                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: None
-                });
-
-                {
-                    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        color_attachments: std::borrow::Cow::Borrowed(&[
-                            wgpu::RenderPassColorAttachmentDescriptor {
-                                attachment: &screen_frame.output.view,
-                                resolve_target: None,
-                                ops: wgpu::Operations {
-                                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                                        r: 0.1,
-                                        g: 0.2,
-                                        b: 0.3,
-                                        a: 1.0,
-                                    }),
-                                    store: true
-                                },
-                            }
-                        ]),
-                        depth_stencil_attachment: None
-                    });
-
-                    let mut objects = objects.iter();
-                    
-                    while let Some(object) = objects.next() {
-                        let object_type = object_types.get(object.object_type()).unwrap();
-                        render_pass.set_pipeline(object_type.get_pipeline());
-                        render_pass.set_vertex_buffer(0, object.vertex_buffer());
-                        render_pass.set_index_buffer(object.index_buffer());
-                        render_pass.draw_indexed(0..3, 0, 0..1)
-                    }
-                }
-
-                queue.submit(std::iter::once(encoder.finish()));
-
-            },
-            _ => panic!("Render call on uninitialized RenderState!")
-        }
-    }*/
-
-   /* fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-        match self {
-            RendererState::Initialized {
-                surface,
-                device,
-                sc_desc,
-                ..
-            } => {
-                sc_desc.width = new_size.width;
-                sc_desc.height = new_size.height;
-                device.create_swap_chain(&surface, &sc_desc);
-            },
-            _ => panic!("Cannot resize unitialized RenderState!")
-        }
-    }*/
 }
 
 struct Renderer;
 
 impl Renderer {
-    fn render(RendererState { device, swap_chain, queue, objects, object_types, ..}: &mut RendererState) {
+    fn render<'a>(RendererState { device, swap_chain, queue, object_types, ..}: &mut RendererState, objects : ReadStorage<'a, StaticMeshObject>) {
         let screen_frame = swap_chain.get_current_frame().expect("Failed to acquire next swap chain texture!");
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: None
@@ -222,30 +127,59 @@ impl Renderer {
                 ]),
                 depth_stencil_attachment: None
             });
-
-            let mut objects = objects.iter();
             
-            while let Some(object) = objects.next() {
+            for object in objects.join() {
                 let object_type = object_types.get(object.object_type()).unwrap();
                 render_pass.set_pipeline(object_type.get_pipeline());
                 render_pass.set_vertex_buffer(0, object.vertex_buffer());
                 render_pass.set_index_buffer(object.index_buffer());
-                render_pass.draw_indexed(0..3, 0, 0..1)
+                render_pass.draw_indexed(0..object.get_indices_count(), 0, 0..1)
             }
         }
 
         queue.submit(std::iter::once(encoder.finish()));
-
     }
+
+    fn resize(RendererState {
+        surface,
+        device,
+        sc_desc,
+        ..
+    } : &mut RendererState, new_size: winit::dpi::PhysicalSize<u32>) {
+        sc_desc.width = new_size.width;
+        sc_desc.height = new_size.height;
+        device.create_swap_chain(&surface, &sc_desc);
+    }
+    
+}
+
+enum RendererEvent {
+    Render,
+    Resize(winit::dpi::PhysicalSize<u32>),
+    None
 }
 
 impl <'a> System<'a> for Renderer {
-    type SystemData = WriteExpect<'a, RendererState>;
+    type SystemData = (WriteExpect<'a, RendererEvent>, WriteExpect<'a, RendererState>, ReadStorage<'a, StaticMeshObject>);
 
-    fn run(&mut self, mut data: Self::SystemData) {
-        Self::render(&mut *data);
+    fn run(&mut self, data: Self::SystemData) {
+        let (mut event, mut state, static_meshes) = data;
+
+        match *event {
+            RendererEvent::Render => {
+                Self::render(&mut state, static_meshes);
+                *event = RendererEvent::None;
+            },
+            RendererEvent::Resize(size) => {
+                Self::resize(&mut state, size);
+                *event = RendererEvent::None;
+            },
+            _ => ()
+        }
     }
 }
+
+
 
 fn main() {
 
@@ -265,10 +199,59 @@ fn main() {
     let window_builder = winit::window::WindowBuilder::new();
     let window = window_builder.with_title("Cells").build(&event_loop).unwrap();
 
+    
     let renderer_state = futures::executor::block_on(RendererState::new(&window));
-    world.insert(renderer_state);
 
-    let mut dispatcher = DispatcherBuilder::new().with(Renderer, "renderer", &[]).build();
+
+    /* Register Components */
+    world.register::<StaticMeshObject>();
+
+    /* Create Entities */
+    world.create_entity().with(StaticMeshObject::new(
+        renderer_state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&[
+                Vertex::new([0.25, 0.25, 0.0], [1.0, 0.0, 0.0]),
+                Vertex::new([-0.5, -0.25, 0.0], [0.0, 1.0, 0.0]),
+                Vertex::new([0.5, -0.25, 0.0], [0.0, 0.0, 1.0]),
+            ]),
+            usage: wgpu::BufferUsage::VERTEX
+        }),
+        renderer_state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&[
+                0 as u16,1,2
+            ]),
+            usage: wgpu::BufferUsage::INDEX
+        })
+    )).build();
+
+    world.create_entity().with(StaticMeshObject::new(
+        renderer_state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&[
+                Vertex::new([0.75, 0.75, 0.0], [1.0, 0.0, 0.0]),
+                Vertex::new([0.25, -0.75, 0.0], [0.0, 1.0, 0.0]),
+                Vertex::new([0.99, -0.75, 0.0], [0.0, 0.0, 1.0]),
+            ]),
+            usage: wgpu::BufferUsage::VERTEX
+        }),
+        renderer_state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&[
+                0 as u16,1,2
+            ]),
+            usage: wgpu::BufferUsage::INDEX
+        })
+    )).build();
+
+    /* Add Resources */
+    world.insert(renderer_state);
+    world.insert(RendererEvent::None);
+
+    
+
+    let mut dispatcher = DispatcherBuilder::new().with_thread_local(Renderer).build();
 
     event_loop.run(move |event, _, control_flow| {
 
@@ -279,47 +262,50 @@ fn main() {
         };
 
         let mut last_update_inst = Instant::now();
+        {
+            let mut renderer_event = world.write_resource::<RendererEvent>();
 
-        match event {
-            event::Event::MainEventsCleared => {
-                {
-                    if last_update_inst.elapsed() > Duration::from_millis(20) {
-                        window.request_redraw();
-                        last_update_inst = Instant::now();
+            match event {
+                event::Event::MainEventsCleared => {
+                    {
+                        if last_update_inst.elapsed() > Duration::from_millis(20) {
+                            window.request_redraw();
+                            last_update_inst = Instant::now();
+                        }
+
+                        pool.run_until_stalled();
                     }
-
-                    pool.run_until_stalled();
                 }
-            }
-            event::Event::WindowEvent {
-                event: WindowEvent::Resized(size),
-                ..
-            } => {
-                log::info!("Resizing to {:?}", size);
-                //state.resize(size);
-            }
-            event::Event::WindowEvent { event, .. } => match event {
-                WindowEvent::KeyboardInput {
-                    input:
-                        event::KeyboardInput {
-                            virtual_keycode: Some(event::VirtualKeyCode::Escape),
-                            state: event::ElementState::Pressed,
-                            ..
-                        },
+                event::Event::WindowEvent {
+                    event: WindowEvent::Resized(size),
                     ..
+                } => {
+                    log::info!("Resizing to {:?}", size);
+                    *renderer_event = RendererEvent::Resize(window.inner_size());
                 }
-                | WindowEvent::CloseRequested => {
-                    *control_flow = ControlFlow::Exit;
-                    log::info!("Closing Application.");
+                event::Event::WindowEvent { event, .. } => match event {
+                    WindowEvent::KeyboardInput {
+                        input:
+                            event::KeyboardInput {
+                                virtual_keycode: Some(event::VirtualKeyCode::Escape),
+                                state: event::ElementState::Pressed,
+                                ..
+                            },
+                        ..
+                    }
+                    | WindowEvent::CloseRequested => {
+                        *control_flow = ControlFlow::Exit;
+                        log::info!("Closing Application.");
+                    }
+                    _ => {
+                        
+                    }
+                },
+                event::Event::RedrawRequested(_) => {
+                    *renderer_event = RendererEvent::Render;             
                 }
-                _ => {
-                    
-                }
-            },
-            event::Event::RedrawRequested(_) => {
-                //state.render();                
+                _ => {}
             }
-            _ => {}
         }
 
         dispatcher.dispatch(&mut world);

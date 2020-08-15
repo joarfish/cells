@@ -1,3 +1,5 @@
+use specs::prelude::*;
+
 use super::render_object_type::RenderObjectType;
 use super::base::Vertex;
 
@@ -73,7 +75,6 @@ impl RenderObjectType for StaticMesh {
     }
 }
 
-
 pub struct StaticMeshObject {
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
@@ -100,4 +101,16 @@ impl StaticMeshObject {
     pub fn object_type(&self) -> usize {
         self.object_type
     }
+
+    pub fn get_vertices_count(&self) -> u32 {
+        3
+    }
+
+    pub fn get_indices_count(&self) -> u32 {
+        3
+    }
+}
+
+impl Component for StaticMeshObject {
+    type Storage = VecStorage<Self>;
 }
