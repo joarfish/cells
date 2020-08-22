@@ -1,4 +1,5 @@
 use crate::DeltaTimer;
+use crate::input::{ KeyState, InputMap };
 use cgmath::prelude::*;
 use specs::prelude::*;
 use specs::{Component, ReadStorage, System, VecStorage, WriteStorage};
@@ -25,7 +26,7 @@ impl Default for Camera {
 impl Camera {
     pub fn new(aspect_ratio: f32) -> Self {
         Camera {
-            position: (0.0, 1.0, 2.0).into(),
+            position: (0.0, 0.0, 3.0).into(),
             target: (0.0, 0.0, 0.0).into(),
             up: cgmath::Vector3::unit_y(),
             aspect: aspect_ratio,
@@ -54,15 +55,25 @@ impl<'a> System<'a> for CameraSystem {
         WriteStorage<'a, Camera>,
         ReadStorage<'a, ActiveCamera>,
         ReadExpect<'a, DeltaTimer>,
+        ReadExpect<'a, InputMap>
     );
 
-    fn run(&mut self, (mut cameras, active_cameras, delta_timer): Self::SystemData) {
+    fn run(&mut self, (mut cameras, active_cameras, delta_timer, input_map): Self::SystemData) {
+
+        let d = delta_timer.get_duration_f32();
+        let speed = 0.75;
+
+        let d_position = cgmath::Point3::new(
+            speed * d * match input_map.key_d { KeyState::Pressed => 1.0, _ => 0.0 } + 
+            speed * d * match input_map.key_a { KeyState::Pressed => -1.0, _ => 0.0 },
+            speed * d * match input_map.key_w { KeyState::Pressed => 1.0, _ => 0.0 } + 
+            speed * d * match input_map.key_s { KeyState::Pressed => -1.0, _ => 0.0 },
+            0.0
+        );
+
         for (camera, _) in (&mut cameras, &active_cameras).join() {
-            camera.position = camera.position.add_element_wise(cgmath::Point3::new(
-                0.0,
-                0.0,
-                0.1 * delta_timer.get_duration_f32(),
-            ));
+            camera.position = camera.position.add_element_wise(d_position);
+            camera.target = camera.target.add_element_wise(d_position);
         }
     }
 }

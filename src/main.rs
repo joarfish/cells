@@ -1,4 +1,5 @@
 mod input;
+mod renderer;
 
 use std::time::{Duration, Instant};
 use wgpu::util::DeviceExt;
@@ -8,17 +9,14 @@ use winit::event::KeyboardInput;
 use winit::event::WindowEvent;
 use winit::event_loop::ControlFlow;
 use winit::event_loop::EventLoop;
-
-mod renderer;
-
+use specs::prelude::*;
+use std::borrow::BorrowMut;
 use renderer::base::Vertex;
 use renderer::camera::*;
 use renderer::material_types::{Material, MaterialTypes, RenderObjectType};
 use renderer::static_mesh::{StaticMesh, StaticMeshMaterial};
 use renderer::uniforms::Uniforms;
-
-use specs::prelude::*;
-use std::borrow::BorrowMut;
+use input::InputMap;
 
 pub struct DeltaTimer {
     d: Duration,
@@ -366,6 +364,7 @@ fn main() {
         d: Duration::from_millis(0),
         last_render: Instant::now(),
     });
+    world.insert(InputMap::new());
 
     let mut dispatcher = DispatcherBuilder::new()
         .with(CameraSystem, "Camera System", &[])
@@ -373,23 +372,18 @@ fn main() {
         .build();
 
     event_loop.run(move |event, _, control_flow| {
-        *control_flow = if cfg!(feature = "metal-auto-capture") {
+        /**control_flow = if cfg!(feature = "metal-auto-capture") {
             ControlFlow::Exit
         } else {
             ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(10))
-        };
+        };*/
 
-        let mut last_update_inst = Instant::now();
+        let start_iteration = Instant::now();
         {
-            let mut renderer_event = world.write_resource::<RendererEvent>();
-
             match event {
                 event::Event::MainEventsCleared => {
-                    if last_update_inst.elapsed() > Duration::from_millis(20) {
-                        window.request_redraw();
-                        last_update_inst = Instant::now();
-                    }
-                    window.request_redraw();
+                    
+                  //  window.request_redraw();
                 }
                 event::Event::WindowEvent {
                     event: WindowEvent::Resized(size),
@@ -400,6 +394,7 @@ fn main() {
                     for camera in (&mut cameras).join() {
                         (*camera).resize(size);
                     }
+                    let mut renderer_event = world.write_resource::<RendererEvent>();
                     *renderer_event = RendererEvent::Resize(size);
                 }
                 event::Event::WindowEvent { event, .. } => match event {
@@ -415,18 +410,34 @@ fn main() {
                     | WindowEvent::CloseRequested => {
                         *control_flow = ControlFlow::Exit;
                         log::info!("Closing Application.");
+                    },
+                    WindowEvent::KeyboardInput {
+                        input:
+                            event::KeyboardInput {
+                                virtual_keycode: Some(key_code),
+                                state: key_state,
+                                ..
+                            },
+                        ..
+                    } => {
+                        let mut input_map = world.write_resource::<InputMap>();
+                        input_map.update(key_code, key_state);
                     }
                     _ => {}
                 },
                 event::Event::RedrawRequested(_) => {
-                    *renderer_event = RendererEvent::Render;
-                    last_update_inst = Instant::now();
+                    {
+                        let mut renderer_event = world.write_resource::<RendererEvent>();
+                        *renderer_event = RendererEvent::Render;
+                    }
                 }
                 _ => {}
             }
+            // @Todo: Find out where this is done best
+            dispatcher.dispatch(&mut world);
+            world.maintain();
+            window.request_redraw();
+            ControlFlow::WaitUntil(Instant::now() + (Duration::from_millis(16) - (Instant::now() - start_iteration)));
         }
-
-        dispatcher.dispatch(&mut world);
-        world.maintain();
     });
 }
