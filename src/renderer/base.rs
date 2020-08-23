@@ -18,7 +18,7 @@ impl Vertex {
 
     pub fn desc<'a>() -> wgpu::VertexBufferDescriptor<'a> {
         wgpu::VertexBufferDescriptor {
-            attributes: std::borrow::Cow::Borrowed(&[
+            attributes: &[
                 wgpu::VertexAttributeDescriptor {
                     offset: 0,
                     shader_location: 0,
@@ -29,7 +29,7 @@ impl Vertex {
                     shader_location: 1,
                     format: wgpu::VertexFormat::Float3
                 }
-            ]),
+            ],
             step_mode: wgpu::InputStepMode::Vertex,
             stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress
         }

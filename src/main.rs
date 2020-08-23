@@ -18,6 +18,10 @@ use renderer::static_mesh::{StaticMesh, StaticMeshMaterial};
 use renderer::uniforms::Uniforms;
 use input::InputMap;
 
+use imgui::*;
+use imgui_wgpu::Renderer as ImGUIRenderer;
+use imgui_winit_support;
+
 pub struct DeltaTimer {
     d: Duration,
     last_render: Instant,
@@ -50,14 +54,16 @@ struct RendererState {
     uniforms: Uniforms,
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
+    window: winit::window::Window,
+    last_cursor: Option<MouseCursor>
 }
 
 impl RendererState {
-    async fn new(window: &winit::window::Window) -> Self {
+    async fn new(window: winit::window::Window) -> Self {
         let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
         let (size, surface) = unsafe {
             let size = window.inner_size();
-            let surface = instance.create_surface(window);
+            let surface = instance.create_surface(&window);
             (size, surface)
         };
 
@@ -82,7 +88,7 @@ impl RendererState {
 
         let trace_dir = std::env::var("WGPU_TRACE");
 
-        let (device, queue) = adapter
+        let (device, mut queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     features: wgpu::Features::empty(),
@@ -117,10 +123,10 @@ impl RendererState {
 
         let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
-            entries: std::borrow::Cow::Borrowed(&[wgpu::BindGroupEntry {
+            entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: wgpu::BindingResource::Buffer(uniform_buffer.slice(0..)),
-            }]),
+            }],
             layout: object_types.get_uniform_layout(RenderObjectType::StaticMesh),
         });
 
@@ -137,6 +143,65 @@ impl RendererState {
             uniforms,
             uniform_buffer,
             uniform_bind_group,
+            window,
+            last_cursor: None,
+        }
+    }
+}
+
+struct GUI {
+    imgui: imgui::Context,
+    platform: imgui_winit_support::WinitPlatform,
+    renderer: imgui_wgpu::Renderer,
+}
+
+impl GUI {
+    fn setup(window: &winit::window::Window,
+        device: &wgpu::Device,
+        queue: &mut wgpu::Queue,
+        sc_desc: &wgpu::SwapChainDescriptor
+    ) -> Self {
+        // ImGUI
+
+        let mut imgui = imgui::Context::create();
+        let mut platform = imgui_winit_support::WinitPlatform::init(&mut imgui);
+        platform.attach_window(
+            imgui.io_mut(),
+            &window,
+            imgui_winit_support::HiDpiMode::Default,
+        );
+        imgui.set_ini_filename(None);
+
+        let hidpi_factor = 1.0;
+
+        let font_size = (13.0 * hidpi_factor) as f32;
+        imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
+
+        imgui.fonts().add_font(&[FontSource::DefaultFontData {
+            config: Some(imgui::FontConfig {
+                oversample_h: 1,
+                pixel_snap_h: true,
+                size_pixels: font_size,
+                ..Default::default()
+            }),
+        }]);
+
+        //
+        // Set up dear imgui wgpu renderer
+        //
+
+        let renderer = ImGUIRenderer::new(
+            &mut imgui,
+            device,
+            queue,
+            sc_desc.format,
+            None,
+        );
+
+        GUI {
+            imgui,
+            platform,
+            renderer
         }
     }
 }
@@ -153,10 +218,13 @@ impl Renderer {
             uniforms,
             uniform_bind_group,
             uniform_buffer,
+            window,
+            last_cursor,
             ..
         }: &'a mut RendererState,
         objects: &ReadStorage<'a, StaticMesh>,
         camera: &Camera,
+        gui: &mut GUI
     ) {
         let screen_frame = swap_chain
             .get_current_frame()
@@ -188,7 +256,7 @@ impl Renderer {
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                color_attachments: std::borrow::Cow::Borrowed(&[
+                color_attachments: &[
                     wgpu::RenderPassColorAttachmentDescriptor {
                         attachment: &screen_frame.output.view,
                         resolve_target: None,
@@ -202,7 +270,7 @@ impl Renderer {
                             store: true,
                         },
                     },
-                ]),
+                ],
                 depth_stencil_attachment: None,
             });
 
@@ -215,6 +283,38 @@ impl Renderer {
                 render_pass.draw_indexed(0..object.get_indices_count(), 0, 0..1)
             }
         }
+
+        queue.submit(std::iter::once(encoder.finish()));
+
+        /* imgui */
+
+        gui.platform.prepare_frame(gui.imgui.io_mut(), &window)
+                    .expect("Failed to prepare frame");
+
+        gui.imgui.io_mut().update_delta_time(Instant::now() - Duration::from_millis(16));
+
+        let ui = gui.imgui.frame();
+        {
+            let window = imgui::Window::new(im_str!("Hello too"));
+            window
+                .size([400.0, 200.0], Condition::FirstUseEver)
+                .position([0.0, 0.0], Condition::FirstUseEver)
+                .build(&ui, || {
+                    ui.text(im_str!("Frametime:"));
+                });
+        }
+
+        let mut encoder: wgpu::CommandEncoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+        if last_cursor != &ui.mouse_cursor() {
+            *last_cursor = ui.mouse_cursor();
+            gui.platform.prepare_render(&ui, &window);
+        }
+        
+        gui.renderer
+            .render(ui.render(), device, &mut encoder, &screen_frame.output.view)
+            .expect("Rendering failed");
 
         queue.submit(std::iter::once(encoder.finish()));
     }
@@ -248,19 +348,20 @@ impl<'a> System<'a> for Renderer {
         ReadStorage<'a, Camera>,
         ReadStorage<'a, ActiveCamera>,
         ReadStorage<'a, StaticMesh>,
+        ReadExpect<'a, GUItWrapper>
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (mut event, mut dT, mut state, cameras, active_cameras, static_meshes) = data;
+        let (mut event, mut d_t, mut state, cameras, active_cameras, static_meshes, gui) = data;
 
         match *event {
             RendererEvent::Render => {
                 if let Some((camera, _)) = (&cameras, &active_cameras).join().into_iter().nth(0) {
-                    Self::render(&mut state, &static_meshes, &camera);
+                    Self::render(&mut state, &static_meshes, &camera, gui.get());
                 }
                 *event = RendererEvent::None;
-                *dT = DeltaTimer {
-                    d: Instant::now() - dT.last_render,
+                *d_t = DeltaTimer {
+                    d: Instant::now() - d_t.last_render,
                     last_render: Instant::now(),
                 }
             }
@@ -272,6 +373,28 @@ impl<'a> System<'a> for Renderer {
         }
     }
 }
+
+struct GUItWrapper{
+    gui: *mut GUI
+}
+    
+impl GUItWrapper{
+
+    pub fn new(gui: &mut GUI) -> Self {
+        GUItWrapper {
+            gui: gui as *mut GUI
+        }
+    }
+
+    fn get(&self) -> &mut GUI
+    {
+        unsafe{
+            &mut *self.gui
+        }
+    }
+}
+unsafe impl Sync for GUItWrapper{}
+unsafe impl Send for GUItWrapper{}
 
 fn main() {
     env_logger::init();
@@ -293,7 +416,9 @@ fn main() {
         .build(&event_loop)
         .unwrap();
 
-    let renderer_state = futures::executor::block_on(RendererState::new(&window));
+    let mut renderer_state = futures::executor::block_on(RendererState::new(window));
+
+    let mut gui = GUI::setup(&renderer_state.window, &renderer_state.device, &mut renderer_state.queue, &renderer_state.sc_desc);
 
     /* Register Components */
     world.register::<StaticMesh>();
@@ -365,25 +490,25 @@ fn main() {
         last_render: Instant::now(),
     });
     world.insert(InputMap::new());
+    world.insert(GUItWrapper::new(&mut gui));
 
     let mut dispatcher = DispatcherBuilder::new()
         .with(CameraSystem, "Camera System", &[])
         .with_thread_local(Renderer)
         .build();
 
-    event_loop.run(move |event, _, control_flow| {
-        /**control_flow = if cfg!(feature = "metal-auto-capture") {
-            ControlFlow::Exit
-        } else {
-            ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(10))
-        };*/
+    let mut last_update = Instant::now();
+    let mut last_render = Instant::now();
 
-        let start_iteration = Instant::now();
+    //let mut last_cursor = None;
+
+    event_loop.run(move |event, _, control_flow| {
+        
         {
             match event {
                 event::Event::MainEventsCleared => {
-                    
-                  //  window.request_redraw();
+                    let RendererState { window, .. } = &*world.read_resource::<RendererState>();
+                    window.request_redraw();
                 }
                 event::Event::WindowEvent {
                     event: WindowEvent::Resized(size),
@@ -426,18 +551,27 @@ fn main() {
                     _ => {}
                 },
                 event::Event::RedrawRequested(_) => {
+
+                    // Render approx. 60 times a second
+                    if (Instant::now() - last_render) >= Duration::from_millis(16) {
+                        *world.write_resource::<RendererEvent>() = RendererEvent::Render;
+                        last_render = Instant::now();
+                    }
+
+                    // Update approx. 250 times per second
+                    if (Instant::now() - last_update) >= Duration::from_millis(4) {
+                        dispatcher.dispatch(&mut world);
+                        world.maintain();
+                        last_update = Instant::now();
+                    }
+
                     {
-                        let mut renderer_event = world.write_resource::<RendererEvent>();
-                        *renderer_event = RendererEvent::Render;
+                        let RendererState { window, .. } = &*world.read_resource::<RendererState>();
+                        window.request_redraw();
                     }
                 }
                 _ => {}
             }
-            // @Todo: Find out where this is done best
-            dispatcher.dispatch(&mut world);
-            world.maintain();
-            window.request_redraw();
-            ControlFlow::WaitUntil(Instant::now() + (Duration::from_millis(16) - (Instant::now() - start_iteration)));
         }
     });
 }
