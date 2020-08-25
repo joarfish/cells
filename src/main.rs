@@ -194,8 +194,7 @@ impl GUI {
             &mut imgui,
             device,
             queue,
-            sc_desc.format,
-            None,
+            sc_desc.format
         );
 
         GUI {
@@ -306,15 +305,31 @@ impl Renderer {
 
         let mut encoder: wgpu::CommandEncoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-
-        if last_cursor != &ui.mouse_cursor() {
-            *last_cursor = ui.mouse_cursor();
-            gui.platform.prepare_render(&ui, &window);
-        }
         
-        gui.renderer
-            .render(ui.render(), device, &mut encoder, &screen_frame.output.view)
+        {
+            let mut imgui_render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                color_attachments: &[
+                        wgpu::RenderPassColorAttachmentDescriptor {
+                            attachment: &screen_frame.output.view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: true,
+                            },
+                        },
+                    ],
+                    depth_stencil_attachment: None,
+            });
+    
+            if last_cursor != &ui.mouse_cursor() {
+                *last_cursor = ui.mouse_cursor();
+                gui.platform.prepare_render(&ui, &window);
+            }
+            
+            gui.renderer
+            .render(ui.render(), queue, device, &mut imgui_render_pass)
             .expect("Rendering failed");
+        }
 
         queue.submit(std::iter::once(encoder.finish()));
     }

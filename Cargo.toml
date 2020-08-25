@@ -19,4 +19,4 @@ cgmath = "0.17.0"
 specs = { version = "0.16.1", features = ["specs-derive"] }
 imgui = "0.4"
 imgui-winit-support = "0.4.0"
-imgui-wgpu = { path = "../imgui-wgpu-rs" }
+imgui-wgpu = "0.9.0"
