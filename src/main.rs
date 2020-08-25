@@ -503,7 +503,12 @@ fn main() {
     //let mut last_cursor = None;
 
     event_loop.run(move |event, _, control_flow| {
-        
+        {
+            let wrapper = world.read_resource::<GUItWrapper>();
+            let RendererState { window, .. } = &*world.read_resource::<RendererState>();
+            let gui = wrapper.get();
+            gui.platform.handle_event(gui.imgui.io_mut(), &window, &event);
+        }
         {
             match event {
                 event::Event::MainEventsCleared => {
@@ -572,6 +577,8 @@ fn main() {
                 }
                 _ => {}
             }
+
+
         }
     });
 }
