@@ -1,3 +1,5 @@
+use std::time::{ Instant, Duration };
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct Vertex {
@@ -33,5 +35,29 @@ impl Vertex {
             step_mode: wgpu::InputStepMode::Vertex,
             stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress
         }
+    }
+}
+
+
+pub struct DeltaTimer {
+    d: Duration,
+    last_render: Instant,
+}
+
+impl DeltaTimer {
+
+    pub fn new(d : Duration, last_render : Instant) -> Self {
+        DeltaTimer {
+            d,
+            last_render
+        }
+    }
+
+    pub fn get_duration_f32(&self) -> f32 {
+        self.d.as_secs_f32()
+    }
+
+    pub fn get_last_render(&self) -> Instant {
+        self.last_render
     }
 }

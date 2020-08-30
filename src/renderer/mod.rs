@@ -5,3 +5,6 @@ pub mod scene;
 pub mod material_types;
 pub mod static_mesh;
 pub mod base;
+pub mod renderer;
+pub mod gui;
+pub mod render_state;

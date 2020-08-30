@@ -58,7 +58,7 @@ pub struct InputSystem {}
 impl<'a> System<'a> for InputSystem {
     type SystemData = ReadExpect<'a, InputMap>;
 
-    fn run(&mut self, input_map: Self::SystemData) {
+    fn run(&mut self, _input_map: Self::SystemData) {
 
     }
 }
