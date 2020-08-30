@@ -46,7 +46,6 @@ fn main() {
     /* Register Components */
     world.register::<StaticMesh>();
     world.register::<Camera>();
-    world.register::<ActiveCamera>();
 
     /* Create Entities */
     world
@@ -97,12 +96,11 @@ fn main() {
         ))
         .build();
 
-    world
+    let active_camera = world
         .create_entity()
         .with(Camera::new(
             renderer_state.sc_desc.width as f32 / renderer_state.sc_desc.height as f32,
         ))
-        .with(ActiveCamera)
         .build();
 
     /* Add Resources */
@@ -114,6 +112,7 @@ fn main() {
     ));
     world.insert(InputMap::new());
     world.insert(GUItWrapper::new(&mut gui));
+    world.insert(ActiveCamera(active_camera));
 
     let mut dispatcher = DispatcherBuilder::new()
         .with(CameraSystem, "Camera System", &[])

@@ -85,62 +85,45 @@ impl Renderer {
                 depth_stencil_attachment: None,
             });
 
-            for object in objects.join() {
-                let object_type = object.object_type();
-                render_pass.set_pipeline(object_types.get_pipeline(object_type));
-                render_pass.set_bind_group(0, &uniform_bind_group, &[]);
-                render_pass.set_vertex_buffer(0, object.vertex_buffer());
-                render_pass.set_index_buffer(object.index_buffer());
-                render_pass.draw_indexed(0..object.get_indices_count(), 0, 0..1)
+            /* Objects */
+
+            {
+                for object in objects.join() {
+                    let object_type = object.object_type();
+                    render_pass.set_pipeline(object_types.get_pipeline(object_type));
+                    render_pass.set_bind_group(0, &uniform_bind_group, &[]);
+                    render_pass.set_vertex_buffer(0, object.vertex_buffer());
+                    render_pass.set_index_buffer(object.index_buffer());
+                    render_pass.draw_indexed(0..object.get_indices_count(), 0, 0..1)
+                }
             }
-        }
 
-        queue.submit(std::iter::once(encoder.finish()));
+            /* imgui */
 
-        /* imgui */
+            let (imgui, platform, renderer) = gui.get();
+            platform.prepare_frame(imgui.io_mut(), &window)
+                        .expect("Failed to prepare frame");
 
-        let (imgui, platform, renderer) = gui.get();
-        platform.prepare_frame(imgui.io_mut(), &window)
-                    .expect("Failed to prepare frame");
+            imgui.io_mut().update_delta_time(Instant::now() - Duration::from_millis(16));
 
-        imgui.io_mut().update_delta_time(Instant::now() - Duration::from_millis(16));
-
-        let ui = imgui.frame();
-        {
-            let window = imgui::Window::new(im_str!("Statistics"));
-            window
-                .size([200.0, 100.0], Condition::FirstUseEver)
-                .position([0.0, 0.0], Condition::FirstUseEver)
-                .build(&ui, || {
-                    ui.text(im_str!("Frametime: {}", 10));
-                });
-        }
-
-        let mut encoder: wgpu::CommandEncoder =
-            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        
-        {
-            let mut imgui_render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                color_attachments: &[
-                        wgpu::RenderPassColorAttachmentDescriptor {
-                            attachment: &screen_frame.output.view,
-                            resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Load,
-                                store: true,
-                            },
-                        },
-                    ],
-                    depth_stencil_attachment: None,
-            });
-    
+            let ui = imgui.frame();
+            {
+                let window = imgui::Window::new(im_str!("Statistics"));
+                window
+                    .size([200.0, 100.0], Condition::FirstUseEver)
+                    .position([0.0, 0.0], Condition::FirstUseEver)
+                    .build(&ui, || {
+                        ui.text(im_str!("Frametime: {}", 10));
+                    });
+            }
+            
             if last_cursor != &ui.mouse_cursor() {
                 *last_cursor = ui.mouse_cursor();
                 platform.prepare_render(&ui, &window);
             }
             
             renderer
-            .render(ui.render(), queue, device, &mut imgui_render_pass)
+            .render(ui.render(), queue, device, &mut render_pass)
             .expect("Rendering failed");
         }
 
@@ -170,19 +153,21 @@ impl<'a> System<'a> for Renderer {
         WriteExpect<'a, DeltaTimer>,
         WriteExpect<'a, RendererState>,
         ReadStorage<'a, Camera>,
-        ReadStorage<'a, ActiveCamera>,
+        ReadExpect<'a, ActiveCamera>,
         ReadStorage<'a, StaticMesh>,
         ReadExpect<'a, GUItWrapper>
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (mut event, mut d_t, mut state, cameras, active_cameras, static_meshes, gui) = data;
+        let (mut event, mut d_t, mut state, cameras, active_camera, static_meshes, gui) = data;
 
         match *event {
             RendererEvent::Render => {
-                if let Some((camera, _)) = (&cameras, &active_cameras).join().into_iter().nth(0) {
+
+                if let Some(camera) = cameras.get((*active_camera).0) {
                     Self::render(&mut state, &static_meshes, &camera, gui.get());
                 }
+
                 *event = RendererEvent::None;
                 *d_t = DeltaTimer::new(Instant::now() - d_t.get_last_render(), Instant::now());
             }

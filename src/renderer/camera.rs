@@ -53,12 +53,12 @@ pub struct CameraSystem;
 impl<'a> System<'a> for CameraSystem {
     type SystemData = (
         WriteStorage<'a, Camera>,
-        ReadStorage<'a, ActiveCamera>,
+        ReadExpect<'a, ActiveCamera>,
         ReadExpect<'a, DeltaTimer>,
         ReadExpect<'a, InputMap>
     );
 
-    fn run(&mut self, (mut cameras, active_cameras, delta_timer, input_map): Self::SystemData) {
+    fn run(&mut self, (mut cameras, active_camera, delta_timer, input_map): Self::SystemData) {
 
         let d = delta_timer.get_duration_f32();
         let speed = 0.75;
@@ -71,13 +71,11 @@ impl<'a> System<'a> for CameraSystem {
             0.0
         );
 
-        for (camera, _) in (&mut cameras, &active_cameras).join() {
+        if let Some(camera) = cameras.get_mut((*active_camera).0) {
             camera.position = camera.position.add_element_wise(d_position);
             camera.target = camera.target.add_element_wise(d_position);
         }
     }
 }
 
-#[derive(Component, Default)]
-#[storage(NullStorage)]
-pub struct ActiveCamera;
+pub struct ActiveCamera(pub Entity);
