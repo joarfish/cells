@@ -88,6 +88,7 @@ impl Renderer {
             /* Objects */
 
             {
+                
                 for object in objects.join() {
                     let object_type = object.object_type();
                     render_pass.set_pipeline(object_types.get_pipeline(object_type));
@@ -104,7 +105,7 @@ impl Renderer {
             platform.prepare_frame(imgui.io_mut(), &window)
                         .expect("Failed to prepare frame");
 
-            imgui.io_mut().update_delta_time(Instant::now() - Duration::from_millis(16));
+            imgui.io_mut().update_delta_time(Instant::now() - (Instant::now() - Duration::from_millis(16)));
 
             let ui = imgui.frame();
             {

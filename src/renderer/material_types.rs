@@ -1,13 +1,13 @@
-use super::static_mesh::StaticMeshMaterial;
+use super::static_mesh::{ MaterialBuilder, Material };
 use wgpu::RenderPipeline;
 
-pub trait Material {
+pub trait MaterialT {
     fn get_pipeline(&self) -> &wgpu::RenderPipeline;
     fn get_uniform_layout(&self) -> &wgpu::BindGroupLayout;
 }
 
 pub struct MaterialTypes {
-    static_mesh : StaticMeshMaterial,
+    static_mesh : Material,
 }
 
 pub enum RenderObjectType {
@@ -18,7 +18,7 @@ impl MaterialTypes {
 
     pub fn new(device : &wgpu::Device, format : wgpu::TextureFormat) -> Self {
         MaterialTypes {
-            static_mesh: StaticMeshMaterial::new(device, format)
+            static_mesh: MaterialBuilder::new().build(device, format)
         }
     }
 

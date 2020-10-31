@@ -14,6 +14,7 @@ impl GUI {
         queue: &mut wgpu::Queue,
         sc_desc: &wgpu::SwapChainDescriptor
     ) -> Self {
+        
         // ImGUI
 
         let mut imgui = imgui::Context::create();
@@ -47,7 +48,7 @@ impl GUI {
             &mut imgui,
             device,
             queue,
-            sc_desc.format
+            imgui_wgpu::RendererConfig::new().set_texture_format(sc_desc.format)
         );
 
         GUI {
