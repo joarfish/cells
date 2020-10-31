@@ -1,7 +1,93 @@
 use specs::prelude::*;
 
 use super::base::Vertex;
-use super::material_types::{ RenderObjectType};
+use super::material_types::{ RenderObjectType };
+
+pub struct VertexAttribute {
+    format: wgpu::VertexFormat,
+    location: u32
+}
+
+pub struct GeometryBuilder {
+    attributes: std::vec::Vec<VertexAttribute>,
+    names: std::vec::Vec<String>,
+    shader_string: String,
+    free_location: u32
+}
+
+pub struct Geometry {
+    attributes: std::vec::Vec<VertexAttribute>,
+    attributes_string: String
+}
+
+impl GeometryBuilder {
+    pub fn new() -> Self {
+        GeometryBuilder {
+            shader_string: "".to_string(),
+            attributes: vec![],
+            names: vec![],
+            free_location: 0
+        }
+    }
+
+    #[inline]
+    fn format_to_format_string(format: wgpu::VertexFormat) -> String {
+        match format {
+            wgpu::VertexFormat::Int => "int".to_string(),
+            wgpu::VertexFormat::Int2 => "ivec2".to_string(),
+            wgpu::VertexFormat::Int3 => "ivec3".to_string(),
+            wgpu::VertexFormat::Int4 => "ivec4".to_string(),
+
+            wgpu::VertexFormat::Float => "float".to_string(),
+            wgpu::VertexFormat::Float2 => "vec2".to_string(),
+            wgpu::VertexFormat::Float3 => "vec3".to_string(),
+            wgpu::VertexFormat::Float4 => "vec4".to_string(),
+            _ => {
+                panic!("Vertex Format not supported yet. (Because Jonas is lazy...)");
+            }
+        }
+    }
+
+    pub fn with_attribute(mut self, name: &str, format: wgpu::VertexFormat) -> Self {
+        self.names.push(name.to_owned());
+        self.attributes.push(VertexAttribute {
+            location: self.free_location,
+            format
+        });
+
+        self.free_location = self.free_location + 1;
+
+        self
+    }
+
+    pub fn build(self) -> Geometry {
+
+        let attributes_string = self.attributes.iter().zip(self.names).fold("".to_string(), |acc,(attribute, name)| {
+            acc.push_str(
+                &format!("layout(location={} in {} {};\n", 
+                attribute.location,
+                Self::format_to_format_string(attribute.format),
+                name
+            ));
+            acc
+        });
+
+        Geometry {
+            attributes: self.attributes,
+            attributes_string
+        }
+    }
+}
+
+pub struct UniformGroupBuilder {
+    bind_group_entries: std::vec::Vec<wgpu::BindGroupLayoutEntry>,
+    bind_group_names: std::vec::Vec<String>
+}
+
+pub struct UniformGroup {
+    bind_group_entries: std::vec::Vec<wgpu::BindGroupLayoutEntry>,
+    bind_group_string: String
+}
 
 pub struct Shader<'a> {
     vertex_state_descriptors: Vec<wgpu::VertexBufferDescriptor<'a>>,
@@ -167,6 +253,10 @@ impl<'a> ShaderBuilder<'a> {
     }
 }
 
+pub struct RenderPipeline {
+
+}
+
 pub struct MaterialBuilder {
     vs_module: Option<wgpu::ShaderModule>,
     fs_module: Option<wgpu::ShaderModule>,
@@ -282,8 +372,6 @@ impl MaterialBuilder {
         Material::new(render_pipeline, uniform_bind_group_layout)
     }
 }
-
-
 
 pub struct Material {
     render_pipeline: wgpu::RenderPipeline,
