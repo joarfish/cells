@@ -10,10 +10,10 @@ struct ModelToWorld {
 }
 
 #[derive(Component)]
-struct Transformation {
-    position: cgmath::Point3<f32>,
-    rotation: cgmath::Point3<f32>,
-    scale: cgmath::Point3<f32>
+pub struct Transformation {
+    pub position: cgmath::Point3<f32>,
+    pub rotation: cgmath::Euler<cgmath::Deg<f32>>,
+    pub scale: cgmath::Point3<f32>
 }
 
 #[derive(Component)]
