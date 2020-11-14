@@ -1,28 +1,29 @@
 use specs::prelude::*;
 use specs::Component;
 use wgpu::{util::*};
+use std::vec::Vec;
 
 use crate::scene::scene_graph::Transformation;
 
-use super::{DeltaTimer, resources::{BindGroupBufferHandle, PipelineHandle, RendererResources}, resources::{BufferSlice, RenderObject, RenderObjectHandle}, scene_base::SceneBaseResources, utils::GpuMatrix4, utils::GpuMatrix4BGA, mesh::create_cube_mesh, utils::{GpuVector3, GpuVector3BGA}};
+use super::{DeltaTimer, mesh::create_cube_mesh, renderer::{RenderCommand, RendererCommandsQueue}, resources::{BindGroupBufferHandle, PipelineHandle, RendererResources}, resources::{BufferSlice, RenderObject, RenderObjectHandle}, scene_base::SceneBaseResources, utils::GpuMatrix4, utils::GpuMatrix4BGA, utils::{GpuVector3, GpuVector3BGA}};
 
-struct DynamicObjectData {
+struct StaticObjectData {
     model_matrix_index: u64,
     color_index: u64,
     render_object_handle: RenderObjectHandle
 }
 
-pub struct DynamicObjectsResources {
+pub struct StaticObjectsResources {
     model_matrices_buffer: BindGroupBufferHandle,
     free_model_matrix_index: u64,
     uniforms_bind_group_layout: wgpu::BindGroupLayout,
     colors_buffer: BindGroupBufferHandle,
     free_color_index: u64,
     pipeline: PipelineHandle,
-    free_render_objects: Vec<DynamicObjectData>,
+    free_render_objects: Vec<StaticObjectData>,
 }
 
-impl DynamicObjectsResources {
+impl StaticObjectsResources {
     pub fn new(device: &wgpu::Device, base_scene_object: &SceneBaseResources, resources: &mut RendererResources) -> Self {
         let mut compiler = shaderc::Compiler::new().unwrap();
 
@@ -71,7 +72,7 @@ impl DynamicObjectsResources {
             void main() {
                 f_position = world_position;
                 f_normal = normal;
-                f_albedo = vec4(u_color, 1.0);
+                f_albedo = vec4(0.25, 0.25, 0.25, 1.0);
             }
         ".to_string();
 
@@ -102,7 +103,7 @@ impl DynamicObjectsResources {
         ));
 
         let uniforms_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("DynamicObject Uniforms"),
+                label: Some("StaticObject Uniforms"),
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
@@ -226,7 +227,7 @@ impl DynamicObjectsResources {
             alpha_to_coverage_enabled: false,
         });
 
-        DynamicObjectsResources {
+        StaticObjectsResources {
             free_render_objects: Vec::new(),
             pipeline: resources.render_pipelines.add_entry(pipeline),
             colors_buffer: resources.bind_group_buffers.add_entry(colors_buffer),
@@ -308,16 +309,20 @@ impl DynamicObjectsResources {
         }
     }
 
-    pub fn create_dynamic_object(&mut self, device: &wgpu::Device, resources: &mut RendererResources, scene_base: &SceneBaseResources) -> DynamicObject {
-        // How should be mapping be here? What we need for the DO-System is actually just buffer indices for model-matrix and color
+    pub fn create_static_object(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, resources: &mut RendererResources, scene_base: &SceneBaseResources, transformation: Transformation) -> StaticObject {
         
-        if let Some(do_data) = self.free_render_objects.pop() {
-            // Reuse RenderObject:
-            // - add model-matrix and color indices to DynamicObject
-            // - check if the render object is still registered with the renderer?
-            // More generally: How do we make sure all referenced resources are still available? This is a big @toto
-            let renderer_object = do_data.render_object_handle; // <-- use this to check if it is still alive
-            DynamicObject {
+        let matrix = 
+                cgmath::Matrix4::from_translation(cgmath::Vector3::new(transformation.position.x, transformation.position.y, transformation.position.z)) *
+                    cgmath::Matrix4::from_nonuniform_scale(transformation.scale.x, transformation.scale.y, transformation.scale.z) *
+                    cgmath::Matrix4::from_angle_x(transformation.rotation.x) *
+                    cgmath::Matrix4::from_angle_y(transformation.rotation.y) *
+                    cgmath::Matrix4::from_angle_z(transformation.rotation.z);
+
+        
+
+        let static_object = if let Some(do_data) = self.free_render_objects.pop() {
+            let renderer_object = do_data.render_object_handle;
+            StaticObject {
                 model_matrix_index: do_data.model_matrix_index,
                 color_index: do_data.color_index,
                 renderer_object
@@ -326,128 +331,69 @@ impl DynamicObjectsResources {
             let renderer_object = self.create_render_object(device, resources, scene_base);
             let handle = resources.render_objects.add_entry(renderer_object);
             
-            DynamicObject {
+            StaticObject {
                 color_index: self.free_color_index - 1,
                 model_matrix_index: self.free_model_matrix_index - 1,
                 renderer_object: handle
             }
-        }
-    }
-}
+        };
 
-pub struct TransformationTests;
+        // Update model matrix for this new render object:
 
-impl<'a> System<'a> for TransformationTests {
-    type SystemData = (
-        WriteStorage<'a, Transformation>,
-        ReadExpect<'a, DeltaTimer>
-    );
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: None
+        });
 
-    fn run(&mut self, data: Self::SystemData) {
-        let (mut transformations, delta_timer) = data;
-        let d = &delta_timer.get_duration_f32();
+        let model_matrices_buffer = resources.bind_group_buffers.get(&self.model_matrices_buffer).expect("");
 
-        for transformation in (&mut transformations).join() {
-            (*transformation).rotation.y += cgmath::Deg(d*50.0);    
-        }
+        let staging_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&[GpuMatrix4BGA::new(matrix)]),
+            usage: wgpu::BufferUsage::COPY_SRC
+        });
+
+        encoder.copy_buffer_to_buffer(
+            &staging_buffer, 0, 
+            &model_matrices_buffer, static_object.model_matrix_index * (std::mem::size_of::<GpuMatrix4BGA>() as u64),
+            (std::mem::size_of::<GpuMatrix4BGA>() ) as wgpu::BufferAddress
+        );
+
+        queue.submit(std::iter::once(encoder.finish()));
+
+        static_object
     }
 }
 
 
 #[derive(Component)]
-pub struct DynamicObject {
+pub struct StaticObject {
     color_index: u64,
     model_matrix_index: u64,
     pub renderer_object: RenderObjectHandle
 }
 
-#[derive(Component)]
-pub struct Color {
-    pub r: f32,
-    pub g: f32, 
-    pub b: f32
-}
+pub struct StaticObjectsSystem;
 
-pub struct DynamicObjectsSystem;
 
-impl DynamicObjectsSystem {
-
-    pub fn update_data(&self, device: &wgpu::Device, queue: &wgpu::Queue, resources: &RendererResources, do_resources: &DynamicObjectsResources, model_matrices: &[GpuMatrix4BGA], colors: &[GpuVector3BGA]) {
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: None
-        });
-
-        {
-            let model_matrices_buffer = resources.bind_group_buffers.get(&do_resources.model_matrices_buffer).expect("");
-
-            let staging_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: None,
-                contents: bytemuck::cast_slice(model_matrices),
-                usage: wgpu::BufferUsage::COPY_SRC
-            });
-
-            encoder.copy_buffer_to_buffer(
-                &staging_buffer, 0, 
-                &model_matrices_buffer, 0,
-                (std::mem::size_of::<GpuMatrix4BGA>() * 50) as wgpu::BufferAddress
-            );
-        }
-
-        {
-            let colors_buffer = resources.bind_group_buffers.get(&do_resources.colors_buffer).expect("");
-
-            let staging_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: None,
-                contents: bytemuck::cast_slice(colors),
-                usage: wgpu::BufferUsage::COPY_SRC
-            });
-
-            encoder.copy_buffer_to_buffer(
-                &staging_buffer, 0, 
-                &colors_buffer, 0,
-                (std::mem::size_of::<GpuVector3BGA>() * 50) as wgpu::BufferAddress
-            );
-        }
-        
-        queue.submit(std::iter::once(encoder.finish()));
-    }
-}
-
-impl<'a> System<'a> for DynamicObjectsSystem {
+impl<'a> System<'a> for StaticObjectsSystem {
     type SystemData = (
-        ReadExpect<'a, DynamicObjectsResources>,
-        ReadExpect<'a, RendererResources>,
-        ReadExpect<'a, wgpu::Device>,
-        ReadExpect<'a, wgpu::Queue>,
-        ReadStorage<'a, DynamicObject>,
-        ReadStorage<'a, Transformation>,
-        ReadStorage<'a, Color>,
+        WriteExpect<'a, RendererCommandsQueue>,
+        ReadStorage<'a, StaticObject>,
     );
 
     fn run(&mut self, data: Self::SystemData) {
 
-        let (do_resources, renderer_resources, device, queue, dynamic_objects, transformations, color) = data;
-        let mut matrices : Vec<GpuMatrix4BGA> = vec![GpuMatrix4BGA::empty(); 50];
-        let mut colors : Vec<GpuVector3BGA> = vec![GpuVector3BGA::empty(); 50];
+        let (
+            mut commands_queue,
+            static_objects
+        ) = data;
 
-        for (object, transformation, color) in (&dynamic_objects, &transformations, &color).join() {
-            // Use object data to set indices properly
-            let position = transformation.position;
-            let scale = transformation.scale;
-            let rotation = transformation.rotation;
-
-            let matrix = 
-                cgmath::Matrix4::from_translation(cgmath::Vector3::new(position.x, position.y, position.z)) *
-                    cgmath::Matrix4::from_nonuniform_scale(scale.x, scale.y, scale.z) *
-                    cgmath::Matrix4::from_angle_x(rotation.x) *
-                    cgmath::Matrix4::from_angle_y(rotation.y) *
-                    cgmath::Matrix4::from_angle_z(rotation.z);
-
-
-            matrices[object.model_matrix_index as usize] = GpuMatrix4BGA::new(matrix);
-            colors[object.color_index as usize] = GpuVector3BGA::new(color.r, color.g, color.b);
+        for static_object in (&static_objects).join() {
+            commands_queue.push_render_command(&RenderCommand {
+                object: static_object.renderer_object.clone(),
+                layer: 1,
+                distance: 1
+            });
         }
-
-        self.update_data(&device, &queue, &renderer_resources, &do_resources, &matrices, &colors);
     }
 }

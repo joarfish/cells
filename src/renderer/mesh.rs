@@ -10,32 +10,82 @@ pub struct Mesh {
 pub fn create_cube_mesh() -> Mesh {
     Mesh { // We need to split the vertices in three, because we want sharp edges
         vertices: vec![
-            GpuVector3::new( -0.5, 0.5, -0.5 ),
-            GpuVector3::new( 0.5, 0.5, -0.5 ),
-            GpuVector3::new( -0.5, -0.5, -0.5 ),
-            GpuVector3::new( 0.5, -0.5, -0.5 ),
-
-            GpuVector3::new( -0.5, 0.5, 0.5 ),
-            GpuVector3::new( 0.5, 0.5, 0.5 ),
-            GpuVector3::new( -0.5, -0.5, 0.5 ),
-            GpuVector3::new( 0.5, -0.5, 0.5 ),
+            // Front
+            GpuVector3::new( -0.5, -0.5, -0.5 ), // 0
+            GpuVector3::new( 0.5, -0.5, -0.5 ), // 1
+            GpuVector3::new( 0.5, 0.5, -0.5 ), // 2
+            GpuVector3::new( -0.5, 0.5, -0.5 ), // 3
+            // Back
+            GpuVector3::new( -0.5, -0.5, 0.5 ), // 4
+            GpuVector3::new( 0.5, -0.5, 0.5 ), // 5
+            GpuVector3::new( 0.5, 0.5, 0.5 ), // 6
+            GpuVector3::new( -0.5, 0.5, 0.5 ), // 7
+            // Top
+            GpuVector3::new( -0.5, 0.5, -0.5 ), // 8
+            GpuVector3::new( 0.5, 0.5, -0.5 ), // 9
+            GpuVector3::new( 0.5, 0.5, 0.5 ), // 10
+            GpuVector3::new( -0.5, 0.5, 0.5 ), // 11
+            // Bottom
+            GpuVector3::new( -0.5, -0.5, -0.5 ), // 12
+            GpuVector3::new( 0.5, -0.5, -0.5 ), // 13
+            GpuVector3::new( 0.5, -0.5, 0.5 ), // 14
+            GpuVector3::new( -0.5, -0.5, 0.5 ), // 15
+            // Left
+            GpuVector3::new( -0.5, -0.5, 0.5 ), // 16
+            GpuVector3::new( -0.5, -0.5, -0.5 ), // 17
+            GpuVector3::new( -0.5, 0.5, -0.5 ), // 18
+            GpuVector3::new( -0.5, 0.5, 0.5 ), // 19
+            // Right
+            GpuVector3::new( 0.5, -0.5, 0.5 ), // 20
+            GpuVector3::new( 0.5, -0.5, -0.5 ), // 21
+            GpuVector3::new( 0.5, 0.5, -0.5 ), // 22
+            GpuVector3::new( 0.5, 0.5, 0.5 ), // 23
         ],
         normals: vec![
-
+            // Front
+            GpuVector3::new( 0.0, 0.0, -1.0), // 0
+            GpuVector3::new( 0.0, 0.0, -1.0), // 1
+            GpuVector3::new( 0.0, 0.0, -1.0), // 2
+            GpuVector3::new( 0.0, 0.0, -1.0), // 3
+            // Back
+            GpuVector3::new( 0.0, 0.0, 1.0), // 4
+            GpuVector3::new( 0.0, 0.0, 1.0), // 5
+            GpuVector3::new( 0.0, 0.0, 1.0), // 6
+            GpuVector3::new( 0.0, 0.0, 1.0), // 7
+            // Top
+            GpuVector3::new( 0.0, 1.0, 0.0), // 8
+            GpuVector3::new( 0.0, 1.0, 0.0), // 9
+            GpuVector3::new( 0.0, 1.0, 0.0), // 10
+            GpuVector3::new( 0.0, 1.0, 0.0), // 11
+            // Bottom
+            GpuVector3::new( 0.0, -1.0, 0.0), // 12
+            GpuVector3::new( 0.0, -1.0, 0.0), // 13
+            GpuVector3::new( 0.0, -1.0, 0.0), // 14
+            GpuVector3::new( 0.0, -1.0, 0.0), // 15
+            // Left
+            GpuVector3::new( -1.0, 0.0, 0.0), // 16
+            GpuVector3::new( -1.0, 0.0, 0.0), // 17
+            GpuVector3::new( -1.0, 0.0, 0.0), // 18
+            GpuVector3::new( -1.0, 0.0, 0.0), // 19
+            // Right
+            GpuVector3::new( 1.0, 0.0, 0.0), // 20
+            GpuVector3::new( 1.0, 0.0, 0.0), // 21
+            GpuVector3::new( 1.0, 0.0, 0.0), // 22
+            GpuVector3::new( 1.0, 0.0, 0.0) // 23
         ],
         indices: vec![
             // Front
-            0, 1, 2,    1, 3, 2,
+            0, 2, 1,        0, 3, 2,
             // Back
-            4, 5, 6,    5, 7, 6,
+            4, 5, 6,        4, 6, 7,
             // Top
-            0, 4, 5,    5, 1, 0,
+            8, 10, 9,       8, 11, 10,
             // Bottom
-            2, 6, 7,    7, 3, 2,
+            12, 13, 14,     12, 14, 15,
             // Left
-            4, 0, 6,    0, 6, 2,
+            16, 18, 17,     16, 19, 18,
             // Right
-            1, 5, 3,    5, 7, 3
+            20, 21, 22,     20, 22, 23
         ]
     }
 }

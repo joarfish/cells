@@ -26,7 +26,7 @@ impl Default for Camera {
 impl Camera {
     pub fn new(aspect_ratio: f32) -> Self {
         Camera {
-            position: (0.0, 10.0, 0.0).into(),
+            position: (0.0, 10.0, 8.0).into(),
             target: (0.0, 0.0, 0.0).into(),
             up: cgmath::Vector3::unit_z(),
             aspect: aspect_ratio,
@@ -61,15 +61,15 @@ impl<'a> System<'a> for CameraSystem {
     fn run(&mut self, (mut cameras, active_camera, delta_timer, input_map): Self::SystemData) {
 
         let d = delta_timer.get_duration_f32();
-        let speed = 0.75;
-        let zoom_speed = 8.0;
+        let speed = 1.25;
+        let zoom_speed = 10.0;
 
         let d_position = cgmath::Point3::new(
-            speed * d * match input_map.key_d { KeyState::Pressed => 1.0, _ => 0.0 } + 
-            speed * d * match input_map.key_a { KeyState::Pressed => -1.0, _ => 0.0 },
+            speed * d * match input_map.key_d { KeyState::Pressed => -1.0, _ => 0.0 } + 
+            speed * d * match input_map.key_a { KeyState::Pressed => 1.0, _ => 0.0 },
             input_map.wheel * zoom_speed * d,
-            speed * d * match input_map.key_w { KeyState::Pressed => 1.0, _ => 0.0 } + 
-            speed * d * match input_map.key_s { KeyState::Pressed => -1.0, _ => 0.0 }
+            speed * d * match input_map.key_w { KeyState::Pressed => -1.0, _ => 0.0 } + 
+            speed * d * match input_map.key_s { KeyState::Pressed => 1.0, _ => 0.0 }
         );
 
         if let Some(camera) = cameras.get_mut((*active_camera).0) {

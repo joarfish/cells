@@ -51,9 +51,9 @@ impl<'a> System<'a> for Spawner {
             let x = rng.gen_range(-5.0, 5.0);
             let y = 0.0;//rng.gen_range(-2.0, 2.0);
             let z = rng.gen_range(-5.0, 5.0);
-            let r = rng.gen_range(0.0, 1.0);
-            let g = rng.gen_range(0.0, 1.0);
-            let b = rng.gen_range(0.0, 1.0);
+            let r = 1.0; // rng.gen_range(0.0, 1.0);
+            let g = 1.0; // rng.gen_range(0.0, 1.0);
+            let b = 1.0; // rng.gen_range(0.0, 1.0);
 
             entities.build_entity()
                 .with(

@@ -3,7 +3,7 @@ mod renderer;
 mod scene;
 
 use std::time::{Duration, Instant};
-use renderer::{DeltaTimer, camera::{ActiveCamera, Camera, CameraSystem}, dynamic_objects::{Color, DynamicObject, DynamicObjectsResources, DynamicObjectsSystem, TransformationTests}, renderer::{Renderer, RendererEvent}, resources::RendererResources, scene_base::SceneBaseResources, scene_base::SceneBaseSystem, setup_rendering};
+use renderer::{DeltaTimer, static_objects::StaticObjectsSystem, camera::{ActiveCamera, Camera, CameraSystem}, dynamic_objects::{Color, DynamicObject, DynamicObjectsResources, DynamicObjectsSystem, TransformationTests}, lights::LightSystem, lights::PointLight, renderer::{Renderer, RendererEvent}, resources::RendererResources, scene_base::SceneBaseResources, scene_base::SceneBaseSystem, setup_rendering};
 use scene::{scene_graph::{SceneGraph, Transformation}, setup_scene, spawning::Spawner};
 use winit::{window::Window, event};
 use winit::event::WindowEvent;
@@ -63,8 +63,10 @@ fn main() {
         .with(TransformationTests, "Transformation Tests", &[])
         .with(SceneBaseSystem, "BaseObjectSystem", &["Camera System"])
         .with(DynamicObjectsSystem, "DynamicObjectsSystem", &[])
+        .with(StaticObjectsSystem, "StaticObjectsSystem", &[])
         .with(Spawner::default(), "Test Spawner", &[])
         .with(SceneGraph::default(), "Scene", &[])
+        .with(LightSystem::default(), "Light System", &[])
         .with(InputSystem, "InputSystem", &["Camera System"])
         .with_thread_local(renderer)
         .build();
@@ -73,6 +75,48 @@ fn main() {
     let mut last_render = Instant::now();
 
     dispatcher.setup(&mut world);
+
+    world.create_entity().with(PointLight {
+        position: cgmath::Vector3::new(1.0, 0.0, 0.0),
+        color: cgmath::Vector3::new(1.0, 0.0, 0.0),
+        intensity: 0.1625,
+        radius: 10.0,
+        buffer_index: 0
+    }).build();
+
+    world.create_entity().with(PointLight {
+        position: cgmath::Vector3::new(0.0, 0.0, -5.0),
+        color: cgmath::Vector3::new(0.0, 1.0, 0.0),
+        intensity: 0.1625,
+        radius: 10.0,
+        buffer_index: 1
+    }).build();
+
+    world.create_entity().with(PointLight {
+        position: cgmath::Vector3::new(-2.0, 0.0, 2.0),
+        color: cgmath::Vector3::new(0.0, 0.0, 1.0),
+        intensity: 0.0625,
+        radius: 10.0,
+        buffer_index: 2
+    }).build();
+
+
+    world.create_entity().with(PointLight {
+        position: cgmath::Vector3::new(2.0, 0.0, -5.0),
+        color: cgmath::Vector3::new(1.0, 0.0, 1.0),
+        intensity: 0.1625,
+        radius: 10.0,
+        buffer_index: 3
+    }).build();
+
+
+    world.create_entity().with(PointLight {
+        position: cgmath::Vector3::new(0.0, 10.0, 0.0),
+        color: cgmath::Vector3::new(1.0, 1.0, 1.0),
+        intensity: 0.0625,
+        radius: 10.0,
+        buffer_index: 4
+    }).build();
 
     //let mut last_cursor = None;
 
