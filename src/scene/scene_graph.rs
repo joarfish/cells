@@ -1,11 +1,13 @@
 use specs::prelude::*;
 use specs::Component;
 
-#[derive(Component)]
-struct Visible;
+use crate::renderer::{dynamic_objects::DynamicObject, renderer::{RenderCommand, RendererCommandsQueue}};
 
 #[derive(Component)]
-struct ModelToWorld {
+pub struct Visible;
+
+#[derive(Component)]
+pub struct ModelToWorld {
     transform: cgmath::Matrix4<f32>
 }
 
@@ -18,7 +20,7 @@ pub struct Transformation {
 
 #[derive(Component)]
 #[storage(FlaggedStorage)]
-struct Parent(Option<Entity>);
+pub struct Parent(Option<Entity>);
 
 struct TeeNode {
     id: u32,
@@ -27,10 +29,20 @@ struct TeeNode {
 
 /// The Scene Graph represents the hierarchical structure of the scene objects.
 /// Each entity can be parented to another one.
-struct SceneGraph {
+pub struct SceneGraph {
     parents_reader: Option<ReaderId<ComponentEvent>>,
     root_node: Option<Entity>,
     node_to_children: std::collections::HashMap<Entity, std::vec::Vec<Entity>>
+}
+
+impl Default for SceneGraph {
+    fn default() -> Self {
+        SceneGraph {
+            parents_reader: None,
+            root_node: None,
+            node_to_children: std::collections::HashMap::new()
+        }
+    }
 }
 
 impl SceneGraph {
@@ -62,11 +74,23 @@ impl<'a> System<'a> for SceneGraph {
         Entities<'a>,
         ReadStorage<'a, Parent>,
         ReadStorage<'a, Transformation>,
-        WriteStorage<'a, ModelToWorld>
+        ReadStorage<'a, DynamicObject>,
+        WriteExpect<'a, RendererCommandsQueue>
     );
 
+    fn run(&mut self, data: Self::SystemData) {
 
-    fn run(&mut self, (entities, parents, transformations, modelToWorlds): Self::SystemData) {
+        if self.parents_reader.is_none() {
+            return;
+        }
+
+        let (
+            entities,
+            parents,
+            transformations,
+            dynamic_objects,
+            mut commands_queue
+        ) = data;
 
         let events = parents
             .channel()
@@ -110,7 +134,7 @@ impl<'a> System<'a> for SceneGraph {
 
         // Traverse tree and update transforms
 
-        for ( entity, transform) in (&entities, &transformations).join() {
+        for (entity, transform) in (&entities, &transformations).join() {
 
         }
 
@@ -118,10 +142,22 @@ impl<'a> System<'a> for SceneGraph {
 
         // Compute render order?
 
+        for dynamic_object in (&dynamic_objects).join() {
+            commands_queue.push_render_command(&RenderCommand {
+                object: dynamic_object.renderer_object.clone(),
+                layer: 1,
+                distance: 1
+            });
+        }
+
     }
 
     fn setup(&mut self, world: &mut World) {
-        // Setup initial tree
+        log::info!("Setup on SceneGraph");
+        Self::SystemData::setup(world);
+        self.parents_reader = Some(
+            WriteStorage::<Parent>::fetch(&world).register_reader()
+        );
     }
 
 }

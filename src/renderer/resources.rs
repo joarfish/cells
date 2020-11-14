@@ -12,6 +12,7 @@ pub struct BufferSlice {
     pub buffer: BufferHandle,
     pub range: std::ops::Range<u64>
 }
+
 pub struct RenderObject {
     pub bind_groups: Vec<BindGroupHandle>, 
     pub pipeline: PipelineHandle,
@@ -44,5 +45,11 @@ impl RendererResources {
             render_pipelines: HandledStdVec::new(),
             render_objects: HandledStdVec::new()
         }
+    }
+}
+
+impl Default for RendererResources {
+    fn default() -> Self {
+        Self::new()
     }
 }

@@ -3,14 +3,14 @@ mod renderer;
 mod scene;
 
 use std::time::{Duration, Instant};
-use renderer::{DeltaTimer, camera::{ActiveCamera, Camera, CameraSystem}, dynamic_objects::{Color, DynamicObject, DynamicObjectsResources, DynamicObjectsSystem, TransformationTests}, renderer::{Renderer, RendererEvent}, resources::RendererResources, scene_base::SceneBaseResources, scene_base::SceneBaseSystem};
-use scene::scene_graph::Transformation;
+use renderer::{DeltaTimer, camera::{ActiveCamera, Camera, CameraSystem}, dynamic_objects::{Color, DynamicObject, DynamicObjectsResources, DynamicObjectsSystem, TransformationTests}, renderer::{Renderer, RendererEvent}, resources::RendererResources, scene_base::SceneBaseResources, scene_base::SceneBaseSystem, setup_rendering};
+use scene::{scene_graph::{SceneGraph, Transformation}, setup_scene, spawning::Spawner};
 use winit::{window::Window, event};
 use winit::event::WindowEvent;
 use winit::event_loop::ControlFlow;
 use winit::event_loop::EventLoop;
 use specs::prelude::*;
-use input::InputMap;
+use input::{InputMap, InputSystem};
 use cgmath::prelude::*;
 
 fn main() {
@@ -33,72 +33,27 @@ fn main() {
         .build(&event_loop)
         .unwrap();
 
-    let (renderer, device, queue) = futures::executor::block_on(Renderer::new(&window));
-    let mut resources = RendererResources::new();
-    let scene_base_resources = SceneBaseResources::new(&device, &mut resources);
-    let mut dynamic_objects_resources = DynamicObjectsResources::new(&device, &scene_base_resources, &mut resources);
+    let window_size = window.inner_size();
+
+    let renderer = setup_rendering(&mut world, &window);
+    setup_scene(&mut world);
 
     /* Register Components */
-    
-    world.register::<Camera>();
-    world.register::<DynamicObject>();
+
     world.register::<Transformation>();
     world.register::<Color>();
 
     let active_camera = world
         .create_entity()
         .with(Camera::new(
-            renderer.sc_desc.width as f32 / renderer.sc_desc.height as f32,
+            window_size.width as f32 / window_size.height as f32,
         ))
         .build();
 
-    world.create_entity()
-    .with(
-        dynamic_objects_resources.create_dynamic_object(&device, &mut resources, &scene_base_resources)
-    )
-    .with(
-        Transformation {
-            position: cgmath::Point3::new(0.0, 0.0, -5.0),
-            rotation: cgmath::Euler { x: cgmath::Deg(0.0), y: cgmath::Deg(0.0), z: cgmath::Deg(0.0) },
-            scale: cgmath::Point3::new(1.0, 1.0, 1.0)
-        }
-    )
-    .with(Color { r: 0.0, g: 1.0, b: 0.0})
-    .build();
-
-    world.create_entity()
-    .with(
-        dynamic_objects_resources.create_dynamic_object(&device, &mut resources, &scene_base_resources)
-    )
-    .with(
-        Transformation {
-            position: cgmath::Point3::new(1.0, 1.0, 0.0),
-            rotation: cgmath::Euler { x: cgmath::Deg(0.0), y: cgmath::Deg(0.0), z: cgmath::Deg(45.0) },
-            scale: cgmath::Point3::new(1.0, 1.0, 1.0)
-        }
-    )
-    .with(Color { r: 1.0, g: 0.0, b: 0.0})
-    .build();
-
     /* Add Resources */
 
-    world.insert(device);
-    world.insert(queue);
-
-    world.insert(dynamic_objects_resources);
-
-    world.insert(scene_base_resources);
-
-    world.insert(resources);
-
-    world.insert(RendererEvent::None);
-
     world.insert(window);
-    
-    world.insert(DeltaTimer::new(
-        Duration::from_millis(0),
-        Instant::now()
-    ));
+
     world.insert(InputMap::new());
     //world.insert(GUItWrapper::new(&mut gui));
     world.insert(ActiveCamera(active_camera));
@@ -108,13 +63,16 @@ fn main() {
         .with(TransformationTests, "Transformation Tests", &[])
         .with(SceneBaseSystem, "BaseObjectSystem", &["Camera System"])
         .with(DynamicObjectsSystem, "DynamicObjectsSystem", &[])
+        .with(Spawner::default(), "Test Spawner", &[])
+        .with(SceneGraph::default(), "Scene", &[])
+        .with(InputSystem, "InputSystem", &["Camera System"])
         .with_thread_local(renderer)
         .build();
 
     let mut last_update = Instant::now();
     let mut last_render = Instant::now();
 
-    
+    dispatcher.setup(&mut world);
 
     //let mut last_cursor = None;
 
@@ -169,7 +127,14 @@ fn main() {
                     } => {
                         let mut input_map = world.write_resource::<InputMap>();
                         input_map.update(key_code, key_state);
-                    }
+                    },
+                    WindowEvent::MouseWheel {
+                        delta: event::MouseScrollDelta::LineDelta(_, delta_y),
+                        ..
+                    } => {
+                        let mut input_map = world.write_resource::<InputMap>();
+                        input_map.update_mouse_wheel(delta_y);
+                    },
                     _ => {}
                 },
                 event::Event::RedrawRequested(_) => {

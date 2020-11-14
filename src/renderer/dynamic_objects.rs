@@ -4,7 +4,7 @@ use wgpu::{util::*};
 
 use crate::scene::scene_graph::Transformation;
 
-use super::{DeltaTimer, resources::{BindGroupBufferHandle, PipelineHandle, RendererResources}, resources::{BufferSlice, RenderObject, RenderObjectHandle}, scene_base::SceneBaseResources, utils::GpuMatrix4, utils::GpuMatrix4BGA, utils::{GpuVector3, GpuVector3BGA}};
+use super::{DeltaTimer, resources::{BindGroupBufferHandle, PipelineHandle, RendererResources}, resources::{BufferSlice, RenderObject, RenderObjectHandle}, scene_base::SceneBaseResources, utils::GpuMatrix4, utils::GpuMatrix4BGA, mesh::create_cube_mesh, utils::{GpuVector3, GpuVector3BGA}};
 
 struct DynamicObjectData {
     model_matrix_index: u64,
@@ -30,6 +30,7 @@ impl DynamicObjectsResources {
             #version 450
 
             layout(location=0) in vec3 a_position;
+            layout(location=1) in vec3 a_normals;
 
             layout(set=0, binding=0)
             uniform SceneUniforms {
@@ -41,15 +42,23 @@ impl DynamicObjectsResources {
                 mat4 u_transform;
             };
 
-            void main() {               
-                gl_Position = u_view_proj * (u_transform * vec4(a_position, 1.0));
+            layout(location=0) out vec3 world_position;
+
+            void main() {        
+                vec4 position = u_transform * vec4(a_position, 1.0);       
+                world_position = position.xyz;
+                gl_Position = u_view_proj * position;
             }        
         ".to_string();
 
         let fs_code = "
             #version 450
 
-            layout(location=0) out vec4 f_color;
+            layout(location=0) in vec3 world_position;
+
+            layout(location=0) out vec4 f_albedo;
+            layout(location=1) out vec3 f_position;
+            layout(location=2) out vec3 f_normal;
 
             layout(set=1, binding=1)
             uniform ModelUniforms {
@@ -57,7 +66,9 @@ impl DynamicObjectsResources {
             };
 
             void main() {
-                f_color = vec4(u_color, 1.0);
+                f_position = world_position;
+                f_normal = world_position;
+                f_albedo = vec4(u_color, 1.0);
             }
         ".to_string();
 
@@ -159,14 +170,35 @@ impl DynamicObjectsResources {
                 depth_bias_clamp: 0.0,
                 clamp_depth: false,
             }),
-            color_states: &[wgpu::ColorStateDescriptor {
-                format: wgpu::TextureFormat::Bgra8Unorm,
-                color_blend: wgpu::BlendDescriptor::REPLACE,
-                alpha_blend: wgpu::BlendDescriptor::REPLACE,
-                write_mask: wgpu::ColorWrite::ALL,
-            }],
+            color_states: &[
+                wgpu::ColorStateDescriptor {
+                    format: wgpu::TextureFormat::Bgra8Unorm,
+                    color_blend: wgpu::BlendDescriptor::REPLACE,
+                    alpha_blend: wgpu::BlendDescriptor::REPLACE,
+                    write_mask: wgpu::ColorWrite::ALL,
+                },
+                wgpu::ColorStateDescriptor {
+                    format: wgpu::TextureFormat::Rgba32Float,
+                    color_blend: wgpu::BlendDescriptor::REPLACE,
+                    alpha_blend: wgpu::BlendDescriptor::REPLACE,
+                    write_mask: wgpu::ColorWrite::RED |  wgpu::ColorWrite::GREEN |  wgpu::ColorWrite::BLUE,
+                },
+                wgpu::ColorStateDescriptor {
+                    format: wgpu::TextureFormat::Rgba32Float,
+                    color_blend: wgpu::BlendDescriptor::REPLACE,
+                    alpha_blend: wgpu::BlendDescriptor::REPLACE,
+                    write_mask: wgpu::ColorWrite::RED |  wgpu::ColorWrite::GREEN |  wgpu::ColorWrite::BLUE,
+                }
+            ],
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-            depth_stencil_state: None,
+            depth_stencil_state: Some(
+                wgpu::DepthStencilStateDescriptor {
+                    format: wgpu::TextureFormat::Depth32Float,
+                    depth_write_enabled: true,
+                    depth_compare: wgpu::CompareFunction::LessEqual,
+                    stencil: wgpu::StencilStateDescriptor::default(),
+                }
+            ),
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
                 vertex_buffers: &[ wgpu::VertexBufferDescriptor {
@@ -235,30 +267,27 @@ impl DynamicObjectsResources {
             layout: &self.uniforms_bind_group_layout,
         }));
 
+        let mesh = create_cube_mesh();
+
         let positions = resources.vertex_buffers.add_entry(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
-            contents: bytemuck::cast_slice(&[
-                GpuVector3 { vector: cgmath::vec3(0.25, 0.25, 0.0) },
-                GpuVector3 { vector: cgmath::vec3(-0.5, -0.25, 0.0) },
-                GpuVector3 { vector: cgmath::vec3(0.5, -0.25, 0.0) }
-            ]),
+            contents: bytemuck::cast_slice(&mesh.vertices),
             usage: wgpu::BufferUsage::VERTEX
         }));
 
-        let index_data = &[0 as u16, 1, 2];
-        let index_count = index_data.len() as u32;
+        let index_count = mesh.indices.len() as u64;
         let indices = resources.index_buffers.add_entry(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
-            contents: bytemuck::cast_slice(index_data),
+            contents: bytemuck::cast_slice(&mesh.indices),
             usage: wgpu::BufferUsage::INDEX,
         }));
 
         RenderObject {
             bind_groups: vec![scene_base.view_matrix_bind_group.clone(), uniforms_bind_group],
             pipeline: self.pipeline.clone(),
-            vertex_buffers: vec![ BufferSlice { buffer: positions, range: 0..3 } ],
-            indices: BufferSlice { buffer: indices, range: 0..6 },
-            index_count
+            vertex_buffers: vec![ BufferSlice { buffer: positions, range: 0..(mesh.vertices.len() as u64) } ],
+            indices: BufferSlice { buffer: indices, range: 0..(index_count * 2) },
+            index_count: index_count as u32
         }
     }
 
@@ -270,18 +299,20 @@ impl DynamicObjectsResources {
             // - add model-matrix and color indices to DynamicObject
             // - check if the render object is still registered with the renderer?
             // More generally: How do we make sure all referenced resources are still available? This is a big @toto
-            do_data.render_object_handle; // <-- use this to check if it is still alive
+            let renderer_object = do_data.render_object_handle; // <-- use this to check if it is still alive
             DynamicObject {
                 model_matrix_index: do_data.model_matrix_index,
-                color_index: do_data.color_index
+                color_index: do_data.color_index,
+                renderer_object
             }
         } else {
-            let render_object = self.create_render_object(device, resources, scene_base);
-            resources.render_objects.add_entry(render_object);
+            let renderer_object = self.create_render_object(device, resources, scene_base);
+            let handle = resources.render_objects.add_entry(renderer_object);
             
             DynamicObject {
                 color_index: self.free_color_index - 1,
-                model_matrix_index: self.free_model_matrix_index - 1
+                model_matrix_index: self.free_model_matrix_index - 1,
+                renderer_object: handle
             }
         }
     }
@@ -300,7 +331,7 @@ impl<'a> System<'a> for TransformationTests {
         let d = &delta_timer.get_duration_f32();
 
         for transformation in (&mut transformations).join() {
-            (*transformation).rotation.z += cgmath::Deg(d*25.0);    
+            (*transformation).rotation.y += cgmath::Deg(d*50.0);    
         }
     }
 }
@@ -309,7 +340,8 @@ impl<'a> System<'a> for TransformationTests {
 #[derive(Component)]
 pub struct DynamicObject {
     color_index: u64,
-    model_matrix_index: u64
+    model_matrix_index: u64,
+    pub renderer_object: RenderObjectHandle
 }
 
 #[derive(Component)]

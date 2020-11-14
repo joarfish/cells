@@ -21,3 +21,4 @@ imgui = "0.5"
 imgui-winit-support = "0.5.0"
 imgui-wgpu = "0.11.0"
 handled_vec = { path="../handled_vec" }
+rand = "0.7.3"
