@@ -1,7 +1,10 @@
 use specs::prelude::*;
 use specs::Component;
 
-use crate::renderer::{dynamic_objects::DynamicObject, renderer::{RenderCommand, RendererCommandsQueue}};
+use crate::renderer::command_queue::{CommandQueue, RenderMeshCommand};
+
+use super::dynamic_objects::DynamicObject;
+use crate::scene::static_objects::StaticObject;
 
 #[derive(Component)]
 pub struct Visible;
@@ -75,7 +78,8 @@ impl<'a> System<'a> for SceneGraph {
         ReadStorage<'a, Parent>,
         ReadStorage<'a, Transformation>,
         ReadStorage<'a, DynamicObject>,
-        WriteExpect<'a, RendererCommandsQueue>
+        ReadStorage<'a, StaticObject>,
+        WriteExpect<'a, CommandQueue<RenderMeshCommand>>
     );
 
     fn run(&mut self, data: Self::SystemData) {
@@ -89,6 +93,7 @@ impl<'a> System<'a> for SceneGraph {
             parents,
             transformations,
             dynamic_objects,
+            static_objects,
             mut commands_queue
         ) = data;
 
@@ -142,11 +147,17 @@ impl<'a> System<'a> for SceneGraph {
 
         // Compute render order?
 
-        for dynamic_object in (&dynamic_objects).join() {
-            commands_queue.push_render_command(&RenderCommand {
-                object: dynamic_object.renderer_object.clone(),
-                layer: 1,
+        for static_object in (&static_objects).join() {
+            commands_queue.enqueue_command( RenderMeshCommand {
+                mesh: static_object.mesh.clone(),
                 distance: 1
+            });
+        }
+
+        for dynamic_object in (&dynamic_objects).join() {
+            commands_queue.enqueue_command(RenderMeshCommand {
+                mesh: dynamic_object.mesh.clone(),
+                distance: 2
             });
         }
 

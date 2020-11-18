@@ -1,14 +1,13 @@
 use super::utils::GpuVector3;
 
-
-pub struct Mesh {
+pub struct Geometry {
     pub vertices: Vec<GpuVector3>,
     pub normals: Vec<GpuVector3>,
     pub indices: Vec<u16>
 }
 
-pub fn create_cube_mesh() -> Mesh {
-    Mesh { // We need to split the vertices in three, because we want sharp edges
+pub fn create_cube_geometry() -> Geometry {
+    Geometry { // We need to split the vertices in three, because we want sharp edges
         vertices: vec![
             // Front
             GpuVector3::new( -0.5, -0.5, -0.5 ), // 0

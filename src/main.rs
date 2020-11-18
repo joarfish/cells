@@ -3,15 +3,17 @@ mod renderer;
 mod scene;
 
 use std::time::{Duration, Instant};
-use renderer::{DeltaTimer, static_objects::StaticObjectsSystem, camera::{ActiveCamera, Camera, CameraSystem}, dynamic_objects::{Color, DynamicObject, DynamicObjectsResources, DynamicObjectsSystem, TransformationTests}, lights::LightSystem, lights::PointLight, renderer::{Renderer, RendererEvent}, resources::RendererResources, scene_base::SceneBaseResources, scene_base::SceneBaseSystem, setup_rendering};
-use scene::{scene_graph::{SceneGraph, Transformation}, setup_scene, spawning::Spawner};
+use renderer::{renderer::RendererEvent, setup_rendering};
+use scene::{camera::{ActiveCamera, Camera, CameraSystem}, dynamic_objects::Color, dynamic_objects::{DynamicObjectsSystem, TransformationTests}, lights::{LightSystem, PointLight}, scene_graph::{SceneGraph, Transformation}, setup_scene, spawning::Spawner};
 use winit::{window::Window, event};
 use winit::event::WindowEvent;
 use winit::event_loop::ControlFlow;
 use winit::event_loop::EventLoop;
 use specs::prelude::*;
 use input::{InputMap, InputSystem};
-use cgmath::prelude::*;
+use crate::scene::static_objects::{StaticObjectsSystem, StaticObject};
+use crate::scene::SceneInfo;
+use crate::renderer::meshes::MeshResources;
 
 fn main() {
     env_logger::init();
@@ -40,9 +42,6 @@ fn main() {
 
     /* Register Components */
 
-    world.register::<Transformation>();
-    world.register::<Color>();
-
     let active_camera = world
         .create_entity()
         .with(Camera::new(
@@ -61,9 +60,8 @@ fn main() {
     let mut dispatcher = DispatcherBuilder::new()
         .with(CameraSystem, "Camera System", &[])
         .with(TransformationTests, "Transformation Tests", &[])
-        .with(SceneBaseSystem, "BaseObjectSystem", &["Camera System"])
-        .with(DynamicObjectsSystem, "DynamicObjectsSystem", &[])
-        .with(StaticObjectsSystem, "StaticObjectsSystem", &[])
+        .with(DynamicObjectsSystem::default(), "DynamicObjectsSystem", &[])
+        .with(StaticObjectsSystem::default(), "StaticObjectsSystem", &[])
         .with(Spawner::default(), "Test Spawner", &[])
         .with(SceneGraph::default(), "Scene", &[])
         .with(LightSystem::default(), "Light System", &[])
@@ -71,17 +69,17 @@ fn main() {
         .with_thread_local(renderer)
         .build();
 
+    dispatcher.setup(&mut world);
+
     let mut last_update = Instant::now();
     let mut last_render = Instant::now();
-
-    dispatcher.setup(&mut world);
 
     world.create_entity().with(PointLight {
         position: cgmath::Vector3::new(1.0, 0.0, 0.0),
         color: cgmath::Vector3::new(1.0, 0.0, 0.0),
         intensity: 0.1625,
         radius: 10.0,
-        buffer_index: 0
+        light_index: 0
     }).build();
 
     world.create_entity().with(PointLight {
@@ -89,7 +87,7 @@ fn main() {
         color: cgmath::Vector3::new(0.0, 1.0, 0.0),
         intensity: 0.1625,
         radius: 10.0,
-        buffer_index: 1
+        light_index: 1
     }).build();
 
     world.create_entity().with(PointLight {
@@ -97,7 +95,7 @@ fn main() {
         color: cgmath::Vector3::new(0.0, 0.0, 1.0),
         intensity: 0.0625,
         radius: 10.0,
-        buffer_index: 2
+        light_index: 2
     }).build();
 
 
@@ -106,7 +104,7 @@ fn main() {
         color: cgmath::Vector3::new(1.0, 0.0, 1.0),
         intensity: 0.1625,
         radius: 10.0,
-        buffer_index: 3
+        light_index: 3
     }).build();
 
 
@@ -115,8 +113,36 @@ fn main() {
         color: cgmath::Vector3::new(1.0, 1.0, 1.0),
         intensity: 0.0625,
         radius: 10.0,
-        buffer_index: 4
+        light_index: 4
     }).build();
+
+    {
+        // Static Objects Tests:
+
+        let mesh =  {
+            let scene_info = world.read_resource::<SceneInfo>();
+            let mut mesh_resources = world.write_resource::<MeshResources>();
+
+            mesh_resources.create_mesh(0, scene_info.static_objects_pool as u16)
+        };
+
+        world.create_entity()
+            .with(
+                StaticObject {
+                    mesh
+                }
+            )
+            .with(
+                Transformation {
+                    position: cgmath::Point3::new(0.0, -1.0, 0.0),
+                    rotation: cgmath::Euler { x: cgmath::Deg(0.0), y: cgmath::Deg(0.0), z: cgmath::Deg(0.0) },
+                    scale: cgmath::Point3::new(10.0, 1.0, 10.0)
+                }
+            )
+            .with(Color { r: 0.4, g: 0.4, b: 0.4} )
+            .build();
+    }
+
 
     //let mut last_cursor = None;
 
