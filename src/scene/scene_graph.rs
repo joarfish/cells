@@ -5,6 +5,7 @@ use crate::renderer::command_queue::{CommandQueue, RenderMeshCommand};
 
 use super::dynamic_objects::DynamicObject;
 use crate::scene::static_objects::StaticObject;
+use crate::renderer::shadow_passes::RenderShadowMeshCommand;
 
 #[derive(Component)]
 pub struct Visible;
@@ -79,7 +80,8 @@ impl<'a> System<'a> for SceneGraph {
         ReadStorage<'a, Transformation>,
         ReadStorage<'a, DynamicObject>,
         ReadStorage<'a, StaticObject>,
-        WriteExpect<'a, CommandQueue<RenderMeshCommand>>
+        WriteExpect<'a, CommandQueue<RenderMeshCommand>>,
+        WriteExpect<'a, CommandQueue<RenderShadowMeshCommand>>
     );
 
     fn run(&mut self, data: Self::SystemData) {
@@ -94,7 +96,8 @@ impl<'a> System<'a> for SceneGraph {
             transformations,
             dynamic_objects,
             static_objects,
-            mut commands_queue
+            mut commands_queue,
+            mut shadow_commands_queue,
         ) = data;
 
         let events = parents
@@ -156,6 +159,10 @@ impl<'a> System<'a> for SceneGraph {
 
         for dynamic_object in (&dynamic_objects).join() {
             commands_queue.enqueue_command(RenderMeshCommand {
+                mesh: dynamic_object.mesh.clone(),
+                distance: 2
+            });
+            shadow_commands_queue.enqueue_command(RenderShadowMeshCommand {
                 mesh: dynamic_object.mesh.clone(),
                 distance: 2
             });

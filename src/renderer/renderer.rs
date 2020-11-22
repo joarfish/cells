@@ -4,6 +4,7 @@ use specs::prelude::*;
 use std::{time::Instant};
 
 use super::{command_queue::{CommandQueue, RenderMeshCommand}, composition_pass::CompositionPass, deferred_pass::DeferredPass, DeltaTimer, lights::{LightsResources}, meshes::MeshResources, scene_base::SceneBaseResources};
+use crate::renderer::shadow_passes::{RenderShadowMeshCommand, ShadowPasses};
 
 pub enum RendererEvent {
     Render,
@@ -58,7 +59,7 @@ impl Renderer {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     features: wgpu::Features::empty(),
-                    limits: limits,
+                    limits,
                     shader_validation: true,
                 },
                 trace_dir.ok().as_ref().map(std::path::Path::new),
@@ -113,6 +114,8 @@ impl<'a> System<'a> for Renderer {
         ReadExpect<'a, SceneBaseResources>,
         ReadExpect<'a, MeshResources>,
         WriteExpect<'a, CommandQueue<RenderMeshCommand>>,
+        ReadExpect<'a, ShadowPasses>,
+        WriteExpect<'a, CommandQueue<RenderShadowMeshCommand>>,
         ReadExpect<'a, CompositionPass>,
         ReadExpect<'a, LightsResources>,
     );
@@ -127,6 +130,8 @@ impl<'a> System<'a> for Renderer {
             scene_base_resources,
             mesh_resources,
             mut mesh_commands,
+            shadow_passes,
+            mut shadow_mesh_commands,
             composition_pass,
             lights_resources
         ) = data;
@@ -135,7 +140,8 @@ impl<'a> System<'a> for Renderer {
             RendererEvent::Render => {
 
                 deferred_pass.render(&device, &queue, &scene_base_resources, &mesh_resources, &mut mesh_commands);
-                composition_pass.render(&device, &queue, &mut self.swap_chain, &lights_resources);
+                shadow_passes.render(&device, &queue, &mesh_resources, &mut shadow_mesh_commands);
+                composition_pass.render(&device, &queue, &mut self.swap_chain, &lights_resources, &shadow_passes);
 
                 *event = RendererEvent::None;
                 *d_t = DeltaTimer::new(Instant::now() - d_t.get_last_render(), Instant::now());

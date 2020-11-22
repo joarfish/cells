@@ -67,7 +67,7 @@ impl DeferredPass {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Depth32Float,
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
+            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::SAMPLED,
             label: None,
         });
 
@@ -83,7 +83,12 @@ impl DeferredPass {
 
             layout(set=0, binding=0)
             uniform SceneUniforms {
-                mat4 u_view_proj;
+                mat4 u_view;
+            };
+
+            layout(set=0, binding=1)
+            uniform SceneUniforms2 {
+                mat4 u_projection;
             };
 
             layout(set=1, binding=0)
@@ -94,11 +99,12 @@ impl DeferredPass {
             layout(location=0) out vec3 world_position;
             layout(location=1) out vec3 normal;
 
-            void main() {        
-                vec4 position = u_transform * vec4(a_position, 1.0);
+            void main() {
+                vec4 position = u_view * u_transform * vec4(a_position, 1.0);
+                mat3 normal_matrix = transpose(inverse(mat3(u_view * u_transform)));
+                normal = normal_matrix * a_normal;
                 world_position = position.xyz;
-                normal = (u_transform * vec4(a_position + a_normal, 1.0) - position).xyz;
-                gl_Position = u_view_proj * position;
+                gl_Position = u_projection * position;
             }        
         ".to_string();
 
@@ -110,7 +116,7 @@ impl DeferredPass {
 
             layout(location=0) out vec4 f_albedo;
             layout(location=1) out vec3 f_position;
-            layout(location=2) out vec3 f_normal;
+            layout(location=2) out vec4 f_normal;
 
             layout(set=1, binding=1)
             uniform ModelUniforms {
@@ -119,7 +125,7 @@ impl DeferredPass {
 
             void main() {
                 f_position = world_position;
-                f_normal = normal;
+                f_normal = vec4(normalize(normal) * 0.5 + 0.5, 1.0);
                 f_albedo = vec4(u_color, 1.0);
             }
         ".to_string();
@@ -152,7 +158,7 @@ impl DeferredPass {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[ &scene_base_resources.view_matrix_bind_group_layout, &mesh_resources.buffer_bind_group_layout ],
+            bind_group_layouts: &[ &scene_base_resources.view_projection_matrix_bind_group_layout, &mesh_resources.buffer_bind_group_layout ],
             push_constant_ranges: &[ ]
         });
 
@@ -281,7 +287,7 @@ impl DeferredPass {
             });
 
             render_pass.set_pipeline(&self.pipeline);
-            render_pass.set_bind_group(0, &scene_base_resources.view_matrix_bind_group, &[]);
+            render_pass.set_bind_group(0, &scene_base_resources.view_projection_matrix_bind_group, &[]);
     
             while let Some(command) = mesh_commands.pop_command() {
 

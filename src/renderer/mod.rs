@@ -8,11 +8,13 @@ pub mod shadow_passes;
 pub mod utils;
 pub mod composition_pass;
 pub mod command_queue;
+pub mod ssao_pass;
 
 use std::time::{Duration, Instant};
 use specs::prelude::*;
 
 use self::{command_queue::{CommandQueue, RenderMeshCommand}, composition_pass::CompositionPass, deferred_pass::DeferredPass, lights::LightsResources, meshes::MeshResources, renderer::{Renderer, RendererEvent}, scene_base::SceneBaseResources};
+use crate::renderer::shadow_passes::{ShadowPasses, RenderShadowMeshCommand};
 
 pub struct DeltaTimer {
     d: Duration,
@@ -48,7 +50,8 @@ pub fn setup_rendering(world: &mut World, window: &winit::window::Window) -> Ren
     let scene_base_resources = SceneBaseResources::new(&device);
 
     let deferred_pass = DeferredPass::new(&device, &mesh_resources, &scene_base_resources, window_size.width, window_size.height);
-    let composition_pass = CompositionPass::new(&device, &deferred_pass, &lights_resources);
+    let shadow_passes = ShadowPasses::new(&device, &mesh_resources, window_size.width, window_size.height);
+    let composition_pass = CompositionPass::new(&device, &queue, &deferred_pass, &shadow_passes, &lights_resources, &scene_base_resources);
 
     world.insert(device);
     world.insert(queue);
@@ -58,9 +61,11 @@ pub fn setup_rendering(world: &mut World, window: &winit::window::Window) -> Ren
     world.insert(scene_base_resources);
 
     world.insert(CommandQueue::<RenderMeshCommand>::new());
+    world.insert(CommandQueue::<RenderShadowMeshCommand>::new());
 
     world.insert(deferred_pass);
     world.insert(composition_pass);
+    world.insert(shadow_passes);
 
     world.insert(RendererEvent::None);
 

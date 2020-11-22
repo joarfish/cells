@@ -1,9 +1,9 @@
 use wgpu::util::*;
+use bytemuck::__core::num::NonZeroU32;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct GpuLight {
-    pub view_matrix: cgmath::Matrix4<f32>,
     pub position: [f32;4],
     pub color: [f32;4],
     pub intensity_radius_enabled: [f32; 4] // gpu wants 16byte wide fields...
@@ -15,7 +15,6 @@ unsafe impl bytemuck::Zeroable for GpuLight {}
 impl Default for GpuLight {
     fn default() -> Self {
         GpuLight {
-            view_matrix: cgmath::perspective(cgmath::Deg(45.0), 1.0, 0.01, 100.0),
             position: [0.0, 0.0, 0.0, 1.0],
             color: [1.0, 1.0, 1.0, 1.0],
             intensity_radius_enabled: [0.125, 10.0, 0.0, 1.0]

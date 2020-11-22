@@ -51,9 +51,9 @@ impl<'a> System<'a> for Spawner {
             let x = rng.gen_range(-5.0, 5.0);
             let y = 0.0;//rng.gen_range(-2.0, 2.0);
             let z = rng.gen_range(-5.0, 5.0);
-            let r = 1.0; // rng.gen_range(0.0, 1.0);
-            let g = 1.0; // rng.gen_range(0.0, 1.0);
-            let b = 1.0; // rng.gen_range(0.0, 1.0);
+            let r = 0.4; // rng.gen_range(0.0, 1.0);
+            let g = 0.4; // rng.gen_range(0.0, 1.0);
+            let b = 0.4; // rng.gen_range(0.0, 1.0);
 
             let mesh = mesh_resources.create_mesh(self.cube_geo_index, scene_info.dynamic_objects_pool as u16);
             log::info!("Created Static Object with Mesh: object_index={}, geometry_index={}, pool_index={}", mesh.object_index, mesh.geometry_index, mesh.pool_index);

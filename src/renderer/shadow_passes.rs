@@ -1,16 +1,75 @@
-use std::num::NonZeroU32;
-
 use super::{lights::LightsResources, meshes::MeshResources, utils::GpuVector3};
+use crate::renderer::meshes::Mesh;
+use crate::renderer::command_queue::CommandQueue;
+use crate::renderer::utils::{GpuMatrix4BGA, GpuVector3BGA};
 
+use wgpu::util::*;
+
+pub struct RenderShadowMeshCommand {
+    pub mesh: Mesh,
+    pub distance: u8
+}
+
+impl From<u32> for RenderShadowMeshCommand {
+    fn from(other: u32) -> Self {
+        RenderShadowMeshCommand {
+            mesh: Mesh {
+                pool_index: ((0b1111_0000_0000_0000_0000_0000_0000_0000 & other) >> 28) as u16,
+                geometry_index: ((0b0000_1111_1111_0000_0000_0000_0000_0000 & other) >> 20) as u32,
+                object_index: (0b0000_0000_0000_0000_1111_1111_1111_1111 & other) as u32,
+            },
+            distance: ((0b0000_0000_0000_1111_0000_0000_0000_0000 & other) >> 16) as u8,
+        }
+    }
+}
+
+impl Into<u32> for RenderShadowMeshCommand {
+    fn into(self) -> u32 {
+        (self.mesh.pool_index as u32) << 28 |
+            (self.mesh.geometry_index << 20) |
+            (self.distance as u32) << 16 |
+            self.mesh.object_index
+    }
+}
+
+use cgmath::SquareMatrix;
+
+#[repr(C, align(256))]
+#[derive(Debug, Copy, Clone)]
+pub struct GpuLightView {
+    pub view_matrix: cgmath::Matrix4<f32>,
+}
+
+impl Default for GpuLightView {
+    fn default() -> Self {
+        let view_matrix = cgmath::perspective(cgmath::Deg(45.0), 1.333334, 10.0, 20.0)//cgmath::ortho(-10.0, 10.0, -10.0, 10.0, 1.0, 100.0)
+            * cgmath::Matrix4::look_at(
+                cgmath::Point3::new(5.0, 15.0, -5.0),
+                cgmath::Point3::new(0.0, 0.0, 0.0),
+                cgmath::Vector3::unit_z()
+            );
+
+        GpuLightView {
+            view_matrix,
+        }
+    }
+}
+
+unsafe impl bytemuck::Pod for GpuLightView {}
+unsafe impl bytemuck::Zeroable for GpuLightView {}
 
 pub struct ShadowPasses {
     shadow_texture: wgpu::Texture,
-    shadow_texture_views: Vec<wgpu::TextureView>,
+    pub shadow_texture_view: wgpu::TextureView,
+    pub shadow_sampler: wgpu::Sampler,
+    shadow_light_buffer: wgpu::Buffer,
+    pub shadow_light_bind_group: wgpu::BindGroup,
+    pub shadow_light_bind_group_layout: wgpu::BindGroupLayout,
     pipeline: wgpu::RenderPipeline,
 }
 
 impl ShadowPasses {
-    pub fn new(device: &wgpu::Device, mesh_resources: &MeshResources, lights_resources: &LightsResources, window_width: u32, window_height: u32) -> Self {
+    pub fn new(device: &wgpu::Device, mesh_resources: &MeshResources, window_width: u32, window_height: u32) -> Self {
 
         let shadow_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Shadows Texture"),
@@ -19,29 +78,58 @@ impl ShadowPasses {
             sample_count: 1,
             mip_level_count: 1,
             size: wgpu::Extent3d { 
-                width: window_width,
-                height: window_height,
-                depth: 20
+                width: window_width * 2,
+                height: window_height * 2,
+                depth: 1
             },
             usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::SAMPLED
         });
     
-        let mut shadow_texture_views = Vec::with_capacity(20);
-    
-        for idx in 0..20 as u32 {
-            shadow_texture_views.push(
-                shadow_texture.create_view(& wgpu::TextureViewDescriptor {
-                    label: None,
-                    format: Some(wgpu::TextureFormat::Depth32Float),
-                    dimension: Some(wgpu::TextureViewDimension::D2),
-                    aspect: wgpu::TextureAspect::All,
-                    base_mip_level: 0,
-                    level_count: None, 
-                    base_array_layer: idx,
-                    array_layer_count: NonZeroU32::new(1)
-                })
-            );
-        }
+        let shadow_texture_view = shadow_texture.create_view(& wgpu::TextureViewDescriptor::default());
+
+        let shadow_light_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+            contents: bytemuck::cast_slice(&[ GpuLightView::default() ])
+        });
+
+        let shadow_light_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                    ty: wgpu::BindingType::UniformBuffer {
+                        dynamic: false,
+                        min_binding_size: None
+                    },
+                    count: None
+                }
+            ]
+        });
+
+        let shadow_light_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer(shadow_light_buffer.slice(..))
+                }
+            ],
+            layout: &shadow_light_bind_group_layout
+        });
+
+        let shadow_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("shadow"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            compare: Some(wgpu::CompareFunction::LessEqual),
+            ..Default::default()
+        });
 
         // create vertex shader:
     
@@ -52,23 +140,10 @@ impl ShadowPasses {
 
             layout(location=0) in vec3 a_position;
 
-            struct GpuLight {
-                mat4 view_matrix;
-                vec4 position;
-                vec4 color;
-                float intensity;
-                float radius;
-                bool enabled;
-            };
-
             layout(set=0, binding=0)
             uniform SceneUniforms {
-                GpuLight lights[20];
+                mat4 light_view_matrix;
             };
-
-            layout ( push_constant ) uniform LightBlock {
-                int light_index;
-            } u_push_constants;
 
             layout(set=1, binding=0)
             uniform ModelUniforms {
@@ -76,7 +151,7 @@ impl ShadowPasses {
             };
 
             void main() {        
-                gl_Position = lights[u_push_constants.light_index].view_matrix * u_transform * vec4(a_position, 1.0);
+                gl_Position = light_view_matrix * u_transform * vec4(a_position, 1.0);
             }        
         ".to_string();
 
@@ -98,7 +173,7 @@ impl ShadowPasses {
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
             bind_group_layouts: &[
-                &lights_resources.lights_bind_group_layout,
+                &shadow_light_bind_group_layout,
                 &mesh_resources.buffer_bind_group_layout
             ],
             push_constant_ranges: &[],
@@ -149,8 +224,61 @@ impl ShadowPasses {
     
         ShadowPasses {
             shadow_texture,
-            shadow_texture_views,
+            shadow_texture_view,
+            shadow_sampler,
+            shadow_light_buffer,
+            shadow_light_bind_group_layout,
+            shadow_light_bind_group,
             pipeline
         }
+    }
+
+    pub fn render(&self, device: &wgpu::Device, queue: &wgpu::Queue, mesh_resources: &MeshResources, shadow_mesh_commands: &mut CommandQueue<RenderShadowMeshCommand>) {
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: None
+        });
+
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                color_attachments: &[ ],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
+                    attachment: &self.shadow_texture_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: true,
+                    }),
+                    stencil_ops: None
+                }),
+            });
+
+            render_pass.push_debug_group("Begin Shadow Pass");
+
+            render_pass.set_pipeline(&self.pipeline);
+            render_pass.set_bind_group(0, &self.shadow_light_bind_group, &[]);
+
+            while let Some(command) = shadow_mesh_commands.pop_command() {
+
+                let mesh_pool = mesh_resources.mesh_pools.get(command.mesh.pool_index as usize).unwrap();
+                let geometry = mesh_resources.geometries.get(command.mesh.geometry_index as usize).unwrap();
+
+                render_pass.set_bind_group(1, &mesh_pool.bind_group,
+                       &[
+                           command.mesh.object_index * (std::mem::size_of::<GpuMatrix4BGA>() as u32),
+                           command.mesh.object_index * (std::mem::size_of::<GpuVector3BGA>() as u32)
+                       ]
+                );
+
+                render_pass.set_vertex_buffer(0, geometry.positions_buffer.slice(..));
+                render_pass.set_vertex_buffer(1, geometry.normals_buffer.slice(..));
+
+                render_pass.set_index_buffer(geometry.index_buffer.slice(..));
+                render_pass.draw_indexed(0..geometry.index_count, 0, 0..1);
+            }
+
+            render_pass.pop_debug_group();
+        }
+
+        queue.submit(std::iter::once(encoder.finish()));
     }
 }

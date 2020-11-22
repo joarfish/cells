@@ -75,10 +75,10 @@ fn main() {
     let mut last_render = Instant::now();
 
     world.create_entity().with(PointLight {
-        position: cgmath::Vector3::new(1.0, 0.0, 0.0),
-        color: cgmath::Vector3::new(1.0, 0.0, 0.0),
+        position: cgmath::Vector3::new(5.0, 15.0, -5.0),
+        color: cgmath::Vector3::new(1.0, 1.0, 1.0),
         intensity: 0.1625,
-        radius: 10.0,
+        radius: 20.0,
         light_index: 0
     }).build();
 
@@ -91,16 +91,16 @@ fn main() {
     }).build();
 
     world.create_entity().with(PointLight {
-        position: cgmath::Vector3::new(-2.0, 0.0, 2.0),
+        position: cgmath::Vector3::new(-2.0, 8.0, 2.0),
         color: cgmath::Vector3::new(0.0, 0.0, 1.0),
-        intensity: 0.0625,
+        intensity: 0.2625,
         radius: 10.0,
         light_index: 2
     }).build();
 
 
     world.create_entity().with(PointLight {
-        position: cgmath::Vector3::new(2.0, 0.0, -5.0),
+        position: cgmath::Vector3::new(2.0, 5.0, -5.0),
         color: cgmath::Vector3::new(1.0, 0.0, 1.0),
         intensity: 0.1625,
         radius: 10.0,
@@ -111,7 +111,7 @@ fn main() {
     world.create_entity().with(PointLight {
         position: cgmath::Vector3::new(0.0, 10.0, 0.0),
         color: cgmath::Vector3::new(1.0, 1.0, 1.0),
-        intensity: 0.0625,
+        intensity: 0.5625,
         radius: 10.0,
         light_index: 4
     }).build();
@@ -139,7 +139,7 @@ fn main() {
                     scale: cgmath::Point3::new(10.0, 1.0, 10.0)
                 }
             )
-            .with(Color { r: 0.4, g: 0.4, b: 0.4} )
+            .with(Color { r: 0.0, g: 0.4, b: 0.0} )
             .build();
     }
 

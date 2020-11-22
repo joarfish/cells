@@ -3,6 +3,7 @@ use specs::Component;
 
 use crate::{renderer::{DeltaTimer, utils::GpuVector3BGA, meshes::{Mesh, MeshResources}, utils::GpuMatrix4BGA}, scene::scene_graph::Transformation};
 use crate::scene::SceneInfo;
+use crate::scene::camera::OPENGL_TO_WGPU_MATRIX;
 
 pub struct TransformationTests;
 
@@ -17,7 +18,7 @@ impl<'a> System<'a> for TransformationTests {
         let d = &delta_timer.get_duration_f32();
 
         for transformation in (&mut transformations).join() {
-            (*transformation).rotation.y += cgmath::Deg(d*50.0);    
+            (*transformation).rotation.y += cgmath::Deg(d*5.0);
         }
     }
 }

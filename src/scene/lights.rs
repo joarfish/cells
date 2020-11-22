@@ -71,7 +71,6 @@ impl<'a> System<'a> for LightSystem {
             // update buffer...
             log::info!("Adding Point Light!");
             resources.update_light(&device, &queue, point_light.light_index, GpuLight {
-                view_matrix: cgmath::perspective(cgmath::Deg(45.0), 1.0, 0.1, 100.0),
                 position: [point_light.position.x, point_light.position.y, point_light.position.z, 1.0],
                 color: [point_light.color.x, point_light.color.y, point_light.color.z, 1.0],
                 intensity_radius_enabled: [ point_light.intensity, point_light.radius, 1.0, 1.0 ]

@@ -9,6 +9,7 @@ use crate::renderer::meshes::{MeshResources, Mesh};
 use crate::scene::SceneInfo;
 use crate::scene::dynamic_objects::Color;
 use crate::renderer::utils::{GpuMatrix4BGA, GpuVector3BGA};
+use crate::scene::camera::OPENGL_TO_WGPU_MATRIX;
 
 
 #[derive(Component)]
@@ -77,7 +78,7 @@ impl<'a> System<'a> for StaticObjectsSystem {
             let rotation = transformation.rotation;
 
             let matrix = GpuMatrix4BGA::new(
-                cgmath::Matrix4::from_translation(cgmath::Vector3::new(position.x, position.y, position.z)) *
+                 cgmath::Matrix4::from_translation(cgmath::Vector3::new(position.x, position.y, position.z)) *
                     cgmath::Matrix4::from_nonuniform_scale(scale.x, scale.y, scale.z) *
                     cgmath::Matrix4::from_angle_x(rotation.x) *
                     cgmath::Matrix4::from_angle_y(rotation.y) *

@@ -48,11 +48,17 @@ impl Camera {
         self.aspect = size.width as f32 / size.height as f32;
     }
 
-    pub fn build_view_projection_matrix(&self) -> cgmath::Matrix4<f32> {
-        let view = cgmath::Matrix4::look_at(self.position, self.target, self.up);
+    pub fn build_projection_matrix(&self) -> cgmath::Matrix4<f32> {
+        //let view = cgmath::Matrix4::look_at(self.position, self.target, self.up);
         let proj = cgmath::perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar);
 
-        OPENGL_TO_WGPU_MATRIX * proj * view
+        OPENGL_TO_WGPU_MATRIX * proj
+    }
+
+    pub fn build_view_matrix(&self) -> cgmath::Matrix4<f32> {
+        let view = cgmath::Matrix4::look_at(self.position, self.target, self.up);
+
+        view
     }
 }
 
@@ -97,9 +103,11 @@ impl<'a> System<'a> for CameraSystem {
             camera.position = camera.position.add_element_wise(d_position);
             camera.target = camera.target.add_element_wise(d_position);
 
-            let updated_matrix = GpuMatrix4::new(camera.build_view_projection_matrix());
-            
-            scene_base_resources.update_view_matrix(&device, &queue, updated_matrix);
+            let updated_view_matrix = camera.build_view_matrix();
+            let updated_projection_matrix = camera.build_projection_matrix();
+
+            scene_base_resources.update_view_matrix(&device, &queue, updated_view_matrix);
+            scene_base_resources.update_projection_matrix(&device, &queue, updated_projection_matrix);
         }
     }
 }
