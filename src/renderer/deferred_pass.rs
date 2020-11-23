@@ -6,10 +6,18 @@ pub struct DeferredPass {
     pub position_texture_view: wgpu::TextureView,
     pub normal_texture_view: wgpu::TextureView,
     pub depth_texture_view: wgpu::TextureView,
+    pub gbuffer_bind_group_layout: wgpu::BindGroupLayout,
+    pub gbuffer_bind_group: wgpu::BindGroup
 }
 
 impl DeferredPass {
-    pub fn new(device: &wgpu::Device, mesh_resources: &MeshResources, scene_base_resources: &SceneBaseResources, screen_width: u32, screen_height: u32) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        mesh_resources: &MeshResources,
+        scene_base_resources: &SceneBaseResources,
+        screen_width: u32,
+        screen_height: u32
+    ) -> Self {
 
         // Setup textures for color attachments:
 
@@ -71,6 +79,92 @@ impl DeferredPass {
             label: None,
         });
 
+        let diffuse_texture_view = diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let position_texture_view = position_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let normal_texture_view = normal_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let depth_texture_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        // GBUffer Bindgroup (can be used by other passes):
+
+        let gbuffer_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("gBuffer Uniforms"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStage::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler {
+                        comparison: false
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStage::FRAGMENT,
+                    ty: wgpu::BindingType::SampledTexture {
+                        dimension: wgpu::TextureViewDimension::D2,
+                        component_type: wgpu::TextureComponentType::Float,
+                        multisampled: false
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStage::FRAGMENT,
+                    ty: wgpu::BindingType::SampledTexture {
+                        dimension: wgpu::TextureViewDimension::D2,
+                        component_type: wgpu::TextureComponentType::Float,
+                        multisampled: false
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStage::FRAGMENT,
+                    ty: wgpu::BindingType::SampledTexture {
+                        dimension: wgpu::TextureViewDimension::D2,
+                        component_type: wgpu::TextureComponentType::Float,
+                        multisampled: false
+                    },
+                    count: None,
+                },
+            ],
+        });
+
+        let gbuffer_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("gBufferBindGroup"),
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Sampler(&device.create_sampler(&wgpu::SamplerDescriptor {
+                        label: None,
+                        address_mode_u: wgpu::AddressMode::ClampToEdge,
+                        address_mode_v: wgpu::AddressMode::ClampToEdge,
+                        address_mode_w: wgpu::AddressMode::ClampToEdge,
+                        mag_filter: wgpu::FilterMode::Nearest,
+                        min_filter: wgpu::FilterMode::Nearest,
+                        mipmap_filter: wgpu::FilterMode::Nearest,
+                        lod_min_clamp: 0.0,
+                        lod_max_clamp: 0.0,
+                        compare: None,
+                        anisotropy_clamp: None,
+                    }))
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&diffuse_texture_view)
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&position_texture_view)
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(&normal_texture_view)
+                },
+            ],
+            layout: &gbuffer_bind_group_layout
+        });
+
         // Setup shaders:
 
         let mut compiler = shaderc::Compiler::new().unwrap();
@@ -84,10 +178,6 @@ impl DeferredPass {
             layout(set=0, binding=0)
             uniform SceneUniforms {
                 mat4 u_view;
-            };
-
-            layout(set=0, binding=1)
-            uniform SceneUniforms2 {
                 mat4 u_projection;
             };
 
@@ -158,7 +248,7 @@ impl DeferredPass {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[ &scene_base_resources.view_projection_matrix_bind_group_layout, &mesh_resources.buffer_bind_group_layout ],
+            bind_group_layouts: &[ &scene_base_resources.bind_group_layout, &mesh_resources.buffer_bind_group_layout ],
             push_constant_ranges: &[ ]
         });
 
@@ -235,11 +325,13 @@ impl DeferredPass {
         });
 
         DeferredPass {
-            diffuse_texture_view: diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default()),
-            position_texture_view: position_texture.create_view(&wgpu::TextureViewDescriptor::default()),
-            normal_texture_view: normal_texture.create_view(&wgpu::TextureViewDescriptor::default()),
-            depth_texture_view: depth_texture.create_view(&wgpu::TextureViewDescriptor::default()),
-            pipeline
+            diffuse_texture_view,
+            position_texture_view,
+            normal_texture_view,
+            depth_texture_view,
+            pipeline,
+            gbuffer_bind_group_layout,
+            gbuffer_bind_group
         }
     }
 
@@ -263,7 +355,7 @@ impl DeferredPass {
                             attachment: &self.position_texture_view,
                             resolve_target: None,
                             ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                                 store: true,
                             },
                         },
@@ -271,7 +363,7 @@ impl DeferredPass {
                             attachment: &self.normal_texture_view,
                             resolve_target: None,
                             ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                                 store: true,
                             },
                         },
@@ -287,7 +379,7 @@ impl DeferredPass {
             });
 
             render_pass.set_pipeline(&self.pipeline);
-            render_pass.set_bind_group(0, &scene_base_resources.view_projection_matrix_bind_group, &[]);
+            render_pass.set_bind_group(0, &scene_base_resources.bind_group, &[]);
     
             while let Some(command) = mesh_commands.pop_command() {
 

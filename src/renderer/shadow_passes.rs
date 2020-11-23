@@ -42,7 +42,8 @@ pub struct GpuLightView {
 
 impl Default for GpuLightView {
     fn default() -> Self {
-        let view_matrix = cgmath::perspective(cgmath::Deg(45.0), 1.333334, 10.0, 20.0)//cgmath::ortho(-10.0, 10.0, -10.0, 10.0, 1.0, 100.0)
+        let view_matrix = //cgmath::perspective(cgmath::Deg(45.0), 1.333334, 10.0, 20.0)//cgmath::ortho(-10.0, 10.0, -10.0, 10.0, 1.0, 100.0)
+            cgmath::ortho(-5.0, 5.0, -5.0, 5.0, 5.0, 20.0)
             * cgmath::Matrix4::look_at(
                 cgmath::Point3::new(5.0, 15.0, -5.0),
                 cgmath::Point3::new(0.0, 0.0, 0.0),
@@ -65,6 +66,8 @@ pub struct ShadowPasses {
     shadow_light_buffer: wgpu::Buffer,
     pub shadow_light_bind_group: wgpu::BindGroup,
     pub shadow_light_bind_group_layout: wgpu::BindGroupLayout,
+    pub shadow_result_bind_group: wgpu::BindGroup,
+    pub shadow_result_bind_group_layout: wgpu::BindGroupLayout,
     pipeline: wgpu::RenderPipeline,
 }
 
@@ -104,7 +107,7 @@ impl ShadowPasses {
                         min_binding_size: None
                     },
                     count: None
-                }
+                },
             ]
         });
 
@@ -114,7 +117,7 @@ impl ShadowPasses {
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::Buffer(shadow_light_buffer.slice(..))
-                }
+                },
             ],
             layout: &shadow_light_bind_group_layout
         });
@@ -127,9 +130,49 @@ impl ShadowPasses {
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
             mipmap_filter: wgpu::FilterMode::Nearest,
-            compare: Some(wgpu::CompareFunction::LessEqual),
+            compare: Some(wgpu::CompareFunction::Less),
             ..Default::default()
         });
+
+        let shadow_result_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStage::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler {
+                        comparison: true
+                    },
+                    count: None
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStage::FRAGMENT,
+                    ty: wgpu::BindingType::SampledTexture {
+                        dimension: wgpu::TextureViewDimension::D2,
+                        component_type: wgpu::TextureComponentType::Float,
+                        multisampled: false
+                    },
+                    count: None
+                },
+            ]
+        });
+
+        let shadow_result_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Sampler(&shadow_sampler)
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&shadow_texture_view)
+                }
+            ],
+            layout: &shadow_result_bind_group_layout
+        });
+
 
         // create vertex shader:
     
@@ -229,6 +272,8 @@ impl ShadowPasses {
             shadow_light_buffer,
             shadow_light_bind_group_layout,
             shadow_light_bind_group,
+            shadow_result_bind_group_layout,
+            shadow_result_bind_group,
             pipeline
         }
     }

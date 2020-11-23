@@ -109,10 +109,11 @@ impl<'a> System<'a> for DynamicObjectsSystem {
 
                 let matrix =
                     cgmath::Matrix4::from_translation(cgmath::Vector3::new(position.x, position.y, position.z)) *
-                        cgmath::Matrix4::from_nonuniform_scale(scale.x, scale.y, scale.z) *
                         cgmath::Matrix4::from_angle_x(rotation.x) *
                         cgmath::Matrix4::from_angle_y(rotation.y) *
-                        cgmath::Matrix4::from_angle_z(rotation.z);
+                        cgmath::Matrix4::from_angle_z(rotation.z) *
+                        cgmath::Matrix4::from_nonuniform_scale(scale.x, scale.y, scale.z)
+                    ;
 
 
                 matrices[object.mesh.object_index as usize] = GpuMatrix4BGA::new(matrix);

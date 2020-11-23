@@ -4,6 +4,7 @@ use cgmath::prelude::*;
 use specs::prelude::*;
 use specs::{Component, System, VecStorage, WriteStorage};
 use winit::dpi::PhysicalSize;
+use crate::renderer::scene_base::GpuSceneBase;
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -106,8 +107,11 @@ impl<'a> System<'a> for CameraSystem {
             let updated_view_matrix = camera.build_view_matrix();
             let updated_projection_matrix = camera.build_projection_matrix();
 
-            scene_base_resources.update_view_matrix(&device, &queue, updated_view_matrix);
-            scene_base_resources.update_projection_matrix(&device, &queue, updated_projection_matrix);
+            scene_base_resources.update_scene_base(&queue, GpuSceneBase {
+                view_matrix: updated_view_matrix,
+                projection_matrix: updated_projection_matrix,
+                window_size: cgmath::Vector2::new( 1024.0 as f32, 768.0)
+            });
         }
     }
 }
