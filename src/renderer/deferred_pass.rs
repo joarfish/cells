@@ -2,6 +2,7 @@ use super::{utils::GpuVector3BGA, command_queue::{CommandQueue, RenderMeshComman
 
 pub struct DeferredPass {
     pub pipeline: wgpu::RenderPipeline,
+    pub msaa_diffuse_view: wgpu::TextureView,
     pub diffuse_texture_view: wgpu::TextureView,
     pub position_texture_view: wgpu::TextureView,
     pub normal_texture_view: wgpu::TextureView,
@@ -21,7 +22,7 @@ impl DeferredPass {
 
         // Setup textures for color attachments:
 
-        let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
+        let base_texture_descriptor = wgpu::TextureDescriptor {
             size: wgpu::Extent3d {
                 width: screen_width,
                 height: screen_height,
@@ -33,50 +34,37 @@ impl DeferredPass {
             format: wgpu::TextureFormat::Bgra8Unorm,
             usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::SAMPLED,
             label: None,
+        };
+
+        let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
+            sample_count: 1,
+            ..base_texture_descriptor
         });
+
+        let msaa_diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
+            sample_count: 8,
+            ..base_texture_descriptor
+        });
+
+        let msaa_diffuse_view = msaa_diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
     
         let position_texture = device.create_texture(&wgpu::TextureDescriptor {
-            size: wgpu::Extent3d {
-                width: screen_width,
-                height: screen_height,
-                depth: 1
-            },
-            mip_level_count: 1,
             sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::SAMPLED,
-            label: None,
+            ..base_texture_descriptor
         });
     
         let normal_texture = device.create_texture(&wgpu::TextureDescriptor {
-            size: wgpu::Extent3d {
-                width: screen_width,
-                height: screen_height,
-                depth: 1
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::SAMPLED,
-            label: None,
+            ..base_texture_descriptor
         });
 
         // Setup texture for depth
 
         let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
-            size: wgpu::Extent3d {
-                width: screen_width,
-                height: screen_height,
-                depth: 1
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Depth32Float,
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::SAMPLED,
             label: None,
+            ..base_texture_descriptor
         });
 
         let diffuse_texture_view = diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -302,22 +290,19 @@ impl DeferredPass {
             ),
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
-                vertex_buffers: &[ wgpu::VertexBufferDescriptor {
-                    attributes: &[ 
-                        wgpu::VertexAttributeDescriptor {
-                            offset: 0,
-                            shader_location: 0,
-                            format: wgpu::VertexFormat::Float3
-                        },
-                        wgpu::VertexAttributeDescriptor {
-                            offset: 0,
-                            shader_location: 1,
-                            format: wgpu::VertexFormat::Float3
-                        }
-                    ],
-                    step_mode: wgpu::InputStepMode::Vertex,
-                    stride: (std::mem::size_of::<GpuVector3>()) as wgpu::BufferAddress
-                }],
+                    vertex_buffers: &[
+                        wgpu::VertexBufferDescriptor {
+                        attributes: &[
+                            wgpu::VertexAttributeDescriptor {
+                                offset: 0,
+                                shader_location: 0,
+                                format: wgpu::VertexFormat::Float3
+                            },
+                        ],
+                        step_mode: wgpu::InputStepMode::Vertex,
+                        stride: (std::mem::size_of::<GpuVector3>()) as wgpu::BufferAddress
+                    }
+                ],
             },
             sample_count: 1,
             sample_mask: !0,
@@ -325,6 +310,7 @@ impl DeferredPass {
         });
 
         DeferredPass {
+            msaa_diffuse_view,
             diffuse_texture_view,
             position_texture_view,
             normal_texture_view,
@@ -345,7 +331,7 @@ impl DeferredPass {
                 color_attachments: &[
                         wgpu::RenderPassColorAttachmentDescriptor {
                             attachment: &self.diffuse_texture_view,
-                            resolve_target: None,
+                            resolve_target: None,//Some(&self.diffuse_texture_view),
                             ops: wgpu::Operations {
                                 load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                                 store: true,

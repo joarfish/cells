@@ -63,8 +63,6 @@ impl MeshPool {
 
     pub fn update_world_matrix(&self, device: &wgpu::Device, queue: &wgpu::Queue, object_index: u32, matrix: &GpuMatrix4BGA) {
 
-        log::info!("Updating world matrix for object_index={}", object_index);
-
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: None
         });

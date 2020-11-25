@@ -14,6 +14,7 @@ use input::{InputMap, InputSystem};
 use crate::scene::static_objects::{StaticObjectsSystem, StaticObject};
 use crate::scene::SceneInfo;
 use crate::renderer::meshes::MeshResources;
+use crate::scene::playing_field::PlayingField;
 
 fn main() {
     env_logger::init();
@@ -65,6 +66,7 @@ fn main() {
         .with(Spawner::default(), "Test Spawner", &[])
         .with(SceneGraph::default(), "Scene", &[])
         .with(LightSystem::default(), "Light System", &[])
+        .with(PlayingField::new(), "Playing Field System", &["StaticObjectsSystem"])
         .with(InputSystem, "InputSystem", &["Camera System"])
         .with_thread_local(renderer)
         .build();
@@ -115,34 +117,6 @@ fn main() {
         radius: 20.0,
         light_index: 4
     }).build();
-
-    {
-        // Static Objects Tests:
-
-        let mesh =  {
-            let scene_info = world.read_resource::<SceneInfo>();
-            let mut mesh_resources = world.write_resource::<MeshResources>();
-
-            mesh_resources.create_mesh(0, scene_info.static_objects_pool as u16)
-        };
-
-        world.create_entity()
-            .with(
-                StaticObject {
-                    mesh
-                }
-            )
-            .with(
-                Transformation {
-                    position: cgmath::Point3::new(0.0, -1.0, 0.0),
-                    rotation: cgmath::Euler { x: cgmath::Deg(0.0), y: cgmath::Deg(0.0), z: cgmath::Deg(0.0) },
-                    scale: cgmath::Point3::new(10.0, 1.0, 10.0)
-                }
-            )
-            .with(Color { r: 0.0, g: 0.4, b: 0.0} )
-            .build();
-    }
-
 
     //let mut last_cursor = None;
 

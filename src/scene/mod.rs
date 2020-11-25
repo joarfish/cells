@@ -4,6 +4,7 @@ pub mod spawning;
 pub mod dynamic_objects;
 pub mod lights;
 pub mod static_objects;
+pub mod playing_field;
 
 use specs::prelude::*;
 

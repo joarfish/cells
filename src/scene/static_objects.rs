@@ -98,7 +98,6 @@ impl<'a> System<'a> for StaticObjectsSystem {
             mesh_pool.update_world_matrix(&device, &queue, static_object.mesh.object_index, &matrix);
             mesh_pool.update_color(&device, &queue, static_object.mesh.object_index, &color_vector)
         }
-
     }
 
     fn setup(&mut self, world: &mut World) {

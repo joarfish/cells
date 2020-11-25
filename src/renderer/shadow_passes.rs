@@ -43,7 +43,7 @@ pub struct GpuLightView {
 impl Default for GpuLightView {
     fn default() -> Self {
         let view_matrix = //cgmath::perspective(cgmath::Deg(45.0), 1.333334, 10.0, 20.0)//cgmath::ortho(-10.0, 10.0, -10.0, 10.0, 1.0, 100.0)
-            cgmath::ortho(-5.0, 5.0, -5.0, 5.0, 5.0, 20.0)
+            cgmath::ortho(-5.0, 5.0, -5.0, 5.0, 10.0, 20.0)
             * cgmath::Matrix4::look_at(
                 cgmath::Point3::new(5.0, 15.0, -5.0),
                 cgmath::Point3::new(0.0, 0.0, 0.0),
@@ -81,8 +81,8 @@ impl ShadowPasses {
             sample_count: 1,
             mip_level_count: 1,
             size: wgpu::Extent3d { 
-                width: window_width * 2,
-                height: window_height * 2,
+                width: window_width * 8,
+                height: window_height * 8,
                 depth: 1
             },
             usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::SAMPLED
