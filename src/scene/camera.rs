@@ -35,9 +35,9 @@ impl Default for Camera {
 impl Camera {
     pub fn new(aspect_ratio: f32) -> Self {
         Camera {
-            position: (0.0, 10.0, 8.0).into(),
+            position: (-8.0, 10.0, 8.0).into(),
             target: (0.0, 0.0, 0.0).into(),
-            up: cgmath::Vector3::unit_z(),
+            up: cgmath::Vector3::unit_y(),
             aspect: aspect_ratio,
             fovy: 45.0,
             znear: 0.1,
@@ -50,7 +50,6 @@ impl Camera {
     }
 
     pub fn build_projection_matrix(&self) -> cgmath::Matrix4<f32> {
-        //let view = cgmath::Matrix4::look_at(self.position, self.target, self.up);
         let proj = cgmath::perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar);
 
         OPENGL_TO_WGPU_MATRIX * proj

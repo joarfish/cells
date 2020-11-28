@@ -84,7 +84,7 @@ impl LightsResources {
 
         encoder.copy_buffer_to_buffer(
             &device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: None,
+                label: Some("Tmp copy buffer light"),
                 contents: bytemuck::cast_slice(&[
                     light
                 ]),

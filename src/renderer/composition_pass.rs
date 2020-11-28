@@ -38,7 +38,7 @@ impl CompositionPass {
 
     
         let vertices = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
+            label: Some("CompPass Vertex Buffer"),
             contents: bytemuck::cast_slice(&[
                 GpuVector3::new(-1.0, -1.0, 0.0),
                 GpuVector3::new(1.0, -1.0, 0.0),
@@ -49,7 +49,7 @@ impl CompositionPass {
         });
     
         let indices = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
+            label: Some("Comp Pass Index Buffer"),
             contents: bytemuck::cast_slice(&[0 as u16, 2, 3, 0, 1, 2]),
             usage: wgpu::BufferUsage::INDEX
         });

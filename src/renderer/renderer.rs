@@ -4,8 +4,10 @@ use specs::prelude::*;
 use std::{time::Instant};
 
 use super::{command_queue::{CommandQueue, RenderMeshCommand}, composition_pass::CompositionPass, deferred_pass::DeferredPass, DeltaTimer, lights::{LightsResources}, meshes::MeshResources, scene_base::SceneBaseResources};
-use crate::renderer::shadow_passes::{RenderShadowMeshCommand, ShadowPasses};
+use crate::renderer::shadow_passes::{RenderShadowMeshCommand, ShadowPasses, RenderShadowBatch};
 use crate::renderer::ssao_pass::SSAOPass;
+use crate::renderer::material::MaterialResources;
+use crate::renderer::command_queue::RenderBatch;
 
 pub enum RendererEvent {
     Render,
@@ -114,9 +116,10 @@ impl<'a> System<'a> for Renderer {
         ReadExpect<'a, DeferredPass>,
         ReadExpect<'a, SceneBaseResources>,
         ReadExpect<'a, MeshResources>,
-        WriteExpect<'a, CommandQueue<RenderMeshCommand>>,
+        ReadExpect<'a, MaterialResources>,
+        WriteExpect<'a, CommandQueue<RenderMeshCommand, RenderBatch>>,
         ReadExpect<'a, ShadowPasses>,
-        WriteExpect<'a, CommandQueue<RenderShadowMeshCommand>>,
+        WriteExpect<'a, CommandQueue<RenderShadowMeshCommand, RenderShadowBatch>>,
         ReadExpect<'a, SSAOPass>,
         ReadExpect<'a, CompositionPass>,
         ReadExpect<'a, LightsResources>,
@@ -131,6 +134,7 @@ impl<'a> System<'a> for Renderer {
             deferred_pass,
             scene_base_resources,
             mesh_resources,
+            material_resources,
             mut mesh_commands,
             shadow_passes,
             mut shadow_mesh_commands,
@@ -142,7 +146,7 @@ impl<'a> System<'a> for Renderer {
         match *event {
             RendererEvent::Render => {
 
-                deferred_pass.render(&device, &queue, &scene_base_resources, &mesh_resources, &mut mesh_commands);
+                deferred_pass.render(&device, &queue, &scene_base_resources, &mesh_resources, &material_resources, &mut mesh_commands);
                 ssao_pass.render(&device, &queue, &scene_base_resources, &deferred_pass);
                 shadow_passes.render(&device, &queue, &mesh_resources, &mut shadow_mesh_commands);
                 composition_pass.render(&device, &queue, &mut self.swap_chain, &scene_base_resources, &lights_resources, &deferred_pass, &shadow_passes, &ssao_pass);

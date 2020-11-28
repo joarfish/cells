@@ -1,11 +1,10 @@
 use specs::prelude::*;
 use specs::Component;
 
-use crate::renderer::command_queue::{CommandQueue, RenderMeshCommand};
+use crate::renderer::command_queue::{CommandQueue, RenderMeshCommand, RenderBatch};
 
-use super::dynamic_objects::DynamicObject;
-use crate::scene::static_objects::StaticObject;
-use crate::renderer::shadow_passes::RenderShadowMeshCommand;
+use crate::renderer::shadow_passes::{RenderShadowMeshCommand, RenderShadowBatch};
+use crate::scene::solid_object::SolidObject;
 
 #[derive(Component)]
 pub struct Visible;
@@ -78,10 +77,9 @@ impl<'a> System<'a> for SceneGraph {
         Entities<'a>,
         ReadStorage<'a, Parent>,
         ReadStorage<'a, Transformation>,
-        ReadStorage<'a, DynamicObject>,
-        ReadStorage<'a, StaticObject>,
-        WriteExpect<'a, CommandQueue<RenderMeshCommand>>,
-        WriteExpect<'a, CommandQueue<RenderShadowMeshCommand>>
+        ReadStorage<'a, SolidObject>,
+        WriteExpect<'a, CommandQueue<RenderMeshCommand, RenderBatch>>,
+        WriteExpect<'a, CommandQueue<RenderShadowMeshCommand, RenderShadowBatch>>
     );
 
     fn run(&mut self, data: Self::SystemData) {
@@ -94,8 +92,7 @@ impl<'a> System<'a> for SceneGraph {
             entities,
             parents,
             transformations,
-            dynamic_objects,
-            static_objects,
+            solid_objects,
             mut commands_queue,
             mut shadow_commands_queue,
         ) = data;
@@ -150,21 +147,17 @@ impl<'a> System<'a> for SceneGraph {
 
         // Compute render order?
 
-        for static_object in (&static_objects).join() {
-            commands_queue.enqueue_command( RenderMeshCommand {
-                mesh: static_object.mesh.clone(),
-                distance: 1
-            });
-        }
-
-        for dynamic_object in (&dynamic_objects).join() {
+        for solid_object in (&solid_objects).join() {
             commands_queue.enqueue_command(RenderMeshCommand {
-                mesh: dynamic_object.mesh.clone(),
-                distance: 2
+                mesh_type: solid_object.mesh_type as u8,
+                material: solid_object.material as u8,
+                object_index: solid_object.object_index as u16,
+                order: 1
             });
             shadow_commands_queue.enqueue_command(RenderShadowMeshCommand {
-                mesh: dynamic_object.mesh.clone(),
-                distance: 2
+                mesh_type: solid_object.mesh_type as u8,
+                object_index: solid_object.object_index as u16,
+                order: 1
             });
         }
 

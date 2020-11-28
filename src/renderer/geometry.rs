@@ -3,6 +3,7 @@ use super::utils::GpuVector3;
 pub struct Geometry {
     pub vertices: Vec<GpuVector3>,
     pub normals: Vec<GpuVector3>,
+    pub part_ids: Vec<u32>,
     pub indices: Vec<u16>
 }
 
@@ -72,6 +73,7 @@ pub fn create_cube_geometry() -> Geometry {
             GpuVector3::new( 1.0, 0.0, 0.0), // 22
             GpuVector3::new( 1.0, 0.0, 0.0) // 23
         ],
+        part_ids: vec![0; 24],
         indices: vec![
             // Front
             0, 2, 1,        0, 3, 2,

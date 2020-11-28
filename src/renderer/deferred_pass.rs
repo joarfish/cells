@@ -1,4 +1,7 @@
 use super::{utils::GpuVector3BGA, command_queue::{CommandQueue, RenderMeshCommand}, meshes::{MeshResources}, scene_base::SceneBaseResources, utils::GpuMatrix4BGA, utils::GpuVector3};
+use crate::renderer::material::MaterialResources;
+use crate::renderer::command_queue::RenderBatch;
+use crate::renderer::utils::GpuMatrix4;
 
 pub struct DeferredPass {
     pub pipeline: wgpu::RenderPipeline,
@@ -14,7 +17,7 @@ pub struct DeferredPass {
 impl DeferredPass {
     pub fn new(
         device: &wgpu::Device,
-        mesh_resources: &MeshResources,
+        material_resources: &MaterialResources,
         scene_base_resources: &SceneBaseResources,
         screen_width: u32,
         screen_height: u32
@@ -162,6 +165,8 @@ impl DeferredPass {
 
             layout(location=0) in vec3 a_position;
             layout(location=1) in vec3 a_normal;
+            layout(location=2) in uint a_part_id;
+            layout(location=3) in mat4 a_model_matrix;
 
             layout(set=0, binding=0)
             uniform SceneUniforms {
@@ -169,21 +174,18 @@ impl DeferredPass {
                 mat4 u_projection;
             };
 
-            layout(set=1, binding=0)
-            uniform ModelUniforms {
-                mat4 u_transform;
-            };
-
             layout(location=0) out vec3 world_position;
             layout(location=1) out vec3 normal;
+            layout(location=2) out flat uint part_id;
 
             void main() {
-                vec4 position = u_view * u_transform * vec4(a_position, 1.0);
-                mat3 normal_matrix = transpose(inverse(mat3(u_view * u_transform)));
+                vec4 position = u_view * a_model_matrix * vec4(a_position, 1.0);
+                mat3 normal_matrix = transpose(inverse(mat3(u_view * a_model_matrix)));
                 normal = normal_matrix * a_normal;
                 world_position = position.xyz;
+                part_id = a_part_id;
                 gl_Position = u_projection * position;
-            }        
+            }
         ".to_string();
 
         let fs_code = "
@@ -191,22 +193,31 @@ impl DeferredPass {
 
             layout(location=0) in vec3 world_position;
             layout(location=1) in vec3 normal;
+            layout(location=2) in flat uint part_id;
 
             layout(location=0) out vec4 f_albedo;
             layout(location=1) out vec3 f_position;
             layout(location=2) out vec4 f_normal;
 
-            layout(set=1, binding=1)
-            uniform ModelUniforms {
-                vec3 u_color;
+            struct Material {
+                vec4 primary;
+                vec4 secondary;
+                vec4 tertiary;
+                vec4 quaternary;
+            };
+
+            layout(set=1, binding=0)
+            uniform MaterialUniforms {
+                Material material;
             };
 
             void main() {
                 f_position = world_position;
                 f_normal = vec4(normalize(normal) * 0.5 + 0.5, 1.0);
-                f_albedo = vec4(u_color, 1.0);
+                f_albedo = material.primary;
             }
         ".to_string();
+        
 
         let vs_spirv = compiler.compile_into_spirv(
                 &vs_code,
@@ -236,7 +247,10 @@ impl DeferredPass {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[ &scene_base_resources.bind_group_layout, &mesh_resources.buffer_bind_group_layout ],
+            bind_group_layouts: &[
+                &scene_base_resources.bind_group_layout,
+                &material_resources.bind_group_layout
+            ],
             push_constant_ranges: &[ ]
         });
 
@@ -290,8 +304,8 @@ impl DeferredPass {
             ),
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
-                    vertex_buffers: &[
-                        wgpu::VertexBufferDescriptor {
+                vertex_buffers: &[
+                    wgpu::VertexBufferDescriptor {
                         attributes: &[
                             wgpu::VertexAttributeDescriptor {
                                 offset: 0,
@@ -301,7 +315,55 @@ impl DeferredPass {
                         ],
                         step_mode: wgpu::InputStepMode::Vertex,
                         stride: (std::mem::size_of::<GpuVector3>()) as wgpu::BufferAddress
-                    }
+                    },
+                    wgpu::VertexBufferDescriptor {
+                        attributes: &[
+                            wgpu::VertexAttributeDescriptor {
+                                offset: 0,
+                                shader_location: 1,
+                                format: wgpu::VertexFormat::Float3
+                            },
+                        ],
+                        step_mode: wgpu::InputStepMode::Vertex,
+                        stride: (std::mem::size_of::<GpuVector3>()) as wgpu::BufferAddress
+                    },
+                    wgpu::VertexBufferDescriptor {
+                        attributes: &[
+                            wgpu::VertexAttributeDescriptor {
+                                offset: 0,
+                                shader_location: 2,
+                                format: wgpu::VertexFormat::Uint
+                            }
+                        ],
+                        step_mode: wgpu::InputStepMode::Vertex,
+                        stride: (std::mem::size_of::<u32>()) as wgpu::BufferAddress
+                    },
+                    wgpu::VertexBufferDescriptor {
+                        attributes: &[
+                            wgpu::VertexAttributeDescriptor {
+                                offset: 0,
+                                shader_location: 3,
+                                format: wgpu::VertexFormat::Float4
+                            },
+                            wgpu::VertexAttributeDescriptor {
+                                offset: 16,
+                                shader_location: 4,
+                                format: wgpu::VertexFormat::Float4
+                            },
+                            wgpu::VertexAttributeDescriptor {
+                                offset: 32,
+                                shader_location: 5,
+                                format: wgpu::VertexFormat::Float4
+                            },
+                            wgpu::VertexAttributeDescriptor {
+                                offset: 48,
+                                shader_location: 6,
+                                format: wgpu::VertexFormat::Float4
+                            },
+                        ],
+                        step_mode: wgpu::InputStepMode::Instance,
+                        stride: (64) as wgpu::BufferAddress
+                    },
                 ],
             },
             sample_count: 1,
@@ -321,7 +383,15 @@ impl DeferredPass {
         }
     }
 
-    pub fn render(&self, device: &wgpu::Device, queue: &wgpu::Queue, scene_base_resources: &SceneBaseResources, mesh_resources: &MeshResources, mesh_commands: &mut CommandQueue<RenderMeshCommand>) {
+    pub fn render(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        scene_base_resources: &SceneBaseResources,
+        mesh_resources: &MeshResources,
+        material_resources: &MaterialResources,
+        mesh_commands: &mut CommandQueue<RenderMeshCommand, RenderBatch>
+    ) {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: None
         });
@@ -364,27 +434,33 @@ impl DeferredPass {
                     }),
             });
 
+            render_pass.push_debug_group("Begin Deferred Pass");
+
             render_pass.set_pipeline(&self.pipeline);
             render_pass.set_bind_group(0, &scene_base_resources.bind_group, &[]);
-    
-            while let Some(command) = mesh_commands.pop_command() {
 
-                let mesh_pool = mesh_resources.mesh_pools.get(command.mesh.pool_index as usize).unwrap();
-                let geometry = mesh_resources.geometries.get(command.mesh.geometry_index as usize).unwrap();
+            while let Some(batch) = mesh_commands.pop_next_batch() {
 
-                render_pass.set_bind_group(1, &mesh_pool.bind_group, 
-                    &[
-                            command.mesh.object_index * (std::mem::size_of::<GpuMatrix4BGA>() as u32),
-                            command.mesh.object_index * (std::mem::size_of::<GpuVector3BGA>() as u32)
-                        ]
-                    );
+                let mesh_type = mesh_resources.mesh_types.get(batch.mesh_type as usize).unwrap();
 
-                render_pass.set_vertex_buffer(0, geometry.positions_buffer.slice(..));
-                render_pass.set_vertex_buffer(1, geometry.normals_buffer.slice(..));
-                
-                render_pass.set_index_buffer(geometry.index_buffer.slice(..));
-                render_pass.draw_indexed(0..geometry.index_count, 0, 0..1);
+                render_pass.set_bind_group(1, &material_resources.bind_group, &[
+                    (wgpu::BIND_BUFFER_ALIGNMENT * batch.material as u64) as u32
+                ]);
+
+                mesh_type.prepare_instances(&queue, &batch.object_indices);
+
+                render_pass.set_vertex_buffer(0, mesh_type.gpu_geometry.positions_buffer.slice(..));
+                render_pass.set_vertex_buffer(1, mesh_type.gpu_geometry.normals_buffer.slice(..));
+                render_pass.set_vertex_buffer(2, mesh_type.gpu_geometry.parts_buffer.slice(..));
+                render_pass.set_vertex_buffer(3, mesh_type.model_matrix_buffer.slice(..));
+
+                let instances = batch.object_indices.len() as u32;
+
+                render_pass.set_index_buffer(mesh_type.gpu_geometry.index_buffer.slice(..));
+                render_pass.draw_indexed(0..mesh_type.gpu_geometry.index_count, 0, 0..instances);
             }
+
+            render_pass.pop_debug_group();
         }
 
         queue.submit(std::iter::once(encoder.finish()));

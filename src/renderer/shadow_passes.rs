@@ -1,38 +1,67 @@
 use super::{lights::LightsResources, meshes::MeshResources, utils::GpuVector3};
-use crate::renderer::meshes::Mesh;
-use crate::renderer::command_queue::CommandQueue;
+use crate::renderer::command_queue::{CommandQueue, Batch, Command};
 use crate::renderer::utils::{GpuMatrix4BGA, GpuVector3BGA};
 
 use wgpu::util::*;
 
+#[derive(Clone)]
 pub struct RenderShadowMeshCommand {
-    pub mesh: Mesh,
-    pub distance: u8
+    pub mesh_type: u8,
+    pub object_index: u16,
+    pub order: u16,
+}
+
+impl Command for RenderShadowMeshCommand {
+    fn is_compatible(&self, other: &Self) -> bool {
+        self.mesh_type == other.mesh_type
+    }
 }
 
 impl From<u32> for RenderShadowMeshCommand {
     fn from(other: u32) -> Self {
         RenderShadowMeshCommand {
-            mesh: Mesh {
-                pool_index: ((0b1111_0000_0000_0000_0000_0000_0000_0000 & other) >> 28) as u16,
-                geometry_index: ((0b0000_1111_1111_0000_0000_0000_0000_0000 & other) >> 20) as u32,
-                object_index: (0b0000_0000_0000_0000_1111_1111_1111_1111 & other) as u32,
-            },
-            distance: ((0b0000_0000_0000_1111_0000_0000_0000_0000 & other) >> 16) as u8,
+            mesh_type: ((0b1111_1110_0000_0000_0000_0000_0000_0000 & other) >> 25) as u8,
+            object_index: ((0b0000_0000_0000_1111_1111_1100_0000_0000 & other) >> 10) as u16,
+            order: (0b0000_0000_0000_0000_0000_0011_1111_1111 & other) as u16,
         }
     }
 }
 
 impl Into<u32> for RenderShadowMeshCommand {
     fn into(self) -> u32 {
-        (self.mesh.pool_index as u32) << 28 |
-            (self.mesh.geometry_index << 20) |
-            (self.distance as u32) << 16 |
-            self.mesh.object_index
+        (self.mesh_type as u32) << 25 |
+        (self.object_index as u32) << 10 |
+        (self.order as u32)
+    }
+}
+
+pub struct RenderShadowBatch {
+    pub object_indices: Vec<u32>,
+    pub mesh_type: u16,
+}
+
+impl Batch<RenderShadowMeshCommand> for RenderShadowBatch {
+    fn new(first_command: RenderShadowMeshCommand) -> Self {
+        RenderShadowBatch {
+            object_indices: Vec::new(),
+            mesh_type: first_command.mesh_type as u16,
+        }
+    }
+
+    fn add_command(&mut self, command: &RenderShadowMeshCommand) -> bool {
+        if command.mesh_type == self.mesh_type as u8 {
+            if !self.object_indices.contains(&(command.object_index as u32)) {
+                self.object_indices.push(command.object_index as u32);
+            }
+            true
+        } else {
+            false
+        }
     }
 }
 
 use cgmath::SquareMatrix;
+use crate::renderer::material::MaterialResources;
 
 #[repr(C, align(256))]
 #[derive(Debug, Copy, Clone)]
@@ -91,7 +120,7 @@ impl ShadowPasses {
         let shadow_texture_view = shadow_texture.create_view(& wgpu::TextureViewDescriptor::default());
 
         let shadow_light_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
+            label: Some("Shadow Light Buffer"),
             usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
             contents: bytemuck::cast_slice(&[ GpuLightView::default() ])
         });
@@ -182,6 +211,7 @@ impl ShadowPasses {
             #version 450
 
             layout(location=0) in vec3 a_position;
+            layout(location=1) in mat4 a_model_matrix;
 
             layout(set=0, binding=0)
             uniform SceneUniforms {
@@ -194,7 +224,7 @@ impl ShadowPasses {
             };
 
             void main() {        
-                gl_Position = light_view_matrix * u_transform * vec4(a_position, 1.0);
+                gl_Position = light_view_matrix * a_model_matrix * vec4(a_position, 1.0);
             }        
         ".to_string();
 
@@ -217,7 +247,6 @@ impl ShadowPasses {
             label: None,
             bind_group_layouts: &[
                 &shadow_light_bind_group_layout,
-                &mesh_resources.buffer_bind_group_layout
             ],
             push_constant_ranges: &[],
         });
@@ -248,17 +277,45 @@ impl ShadowPasses {
             }),
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
-                vertex_buffers: &[ wgpu::VertexBufferDescriptor {
-                    attributes: &[ 
-                        wgpu::VertexAttributeDescriptor {
-                            offset: 0,
-                            shader_location: 0,
-                            format: wgpu::VertexFormat::Float3
-                        },
-                    ],
-                    step_mode: wgpu::InputStepMode::Vertex,
-                    stride: (std::mem::size_of::<GpuVector3>()) as wgpu::BufferAddress
-                }],
+                vertex_buffers: &[
+                    wgpu::VertexBufferDescriptor {
+                        attributes: &[
+                            wgpu::VertexAttributeDescriptor {
+                                offset: 0,
+                                shader_location: 0,
+                                format: wgpu::VertexFormat::Float3
+                            },
+                        ],
+                        step_mode: wgpu::InputStepMode::Vertex,
+                        stride: (std::mem::size_of::<GpuVector3>()) as wgpu::BufferAddress
+                    },
+                    wgpu::VertexBufferDescriptor {
+                        attributes: &[
+                            wgpu::VertexAttributeDescriptor {
+                                offset: 0,
+                                shader_location: 1,
+                                format: wgpu::VertexFormat::Float4
+                            },
+                            wgpu::VertexAttributeDescriptor {
+                                offset: 16,
+                                shader_location: 2,
+                                format: wgpu::VertexFormat::Float4
+                            },
+                            wgpu::VertexAttributeDescriptor {
+                                offset: 32,
+                                shader_location: 3,
+                                format: wgpu::VertexFormat::Float4
+                            },
+                            wgpu::VertexAttributeDescriptor {
+                                offset: 48,
+                                shader_location: 4,
+                                format: wgpu::VertexFormat::Float4
+                            },
+                        ],
+                        step_mode: wgpu::InputStepMode::Instance,
+                        stride: 16 as wgpu::BufferAddress
+                    },
+                ],
             },
             sample_count: 1,
             sample_mask: !0,
@@ -278,7 +335,13 @@ impl ShadowPasses {
         }
     }
 
-    pub fn render(&self, device: &wgpu::Device, queue: &wgpu::Queue, mesh_resources: &MeshResources, shadow_mesh_commands: &mut CommandQueue<RenderShadowMeshCommand>) {
+    pub fn render(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        mesh_resources: &MeshResources,
+        shadow_mesh_commands: &mut CommandQueue<RenderShadowMeshCommand, RenderShadowBatch>
+    ) {
 
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: None
@@ -302,23 +365,19 @@ impl ShadowPasses {
             render_pass.set_pipeline(&self.pipeline);
             render_pass.set_bind_group(0, &self.shadow_light_bind_group, &[]);
 
-            while let Some(command) = shadow_mesh_commands.pop_command() {
+            while let Some(batch) = shadow_mesh_commands.pop_next_batch() {
 
-                let mesh_pool = mesh_resources.mesh_pools.get(command.mesh.pool_index as usize).unwrap();
-                let geometry = mesh_resources.geometries.get(command.mesh.geometry_index as usize).unwrap();
+                let mesh_type = mesh_resources.mesh_types.get(batch.mesh_type as usize).unwrap();
 
-                render_pass.set_bind_group(1, &mesh_pool.bind_group,
-                       &[
-                           command.mesh.object_index * (std::mem::size_of::<GpuMatrix4BGA>() as u32),
-                           command.mesh.object_index * (std::mem::size_of::<GpuVector3BGA>() as u32)
-                       ]
-                );
+                render_pass.set_vertex_buffer(0, mesh_type.gpu_geometry.positions_buffer.slice(..));
+                render_pass.set_vertex_buffer(1, mesh_type.model_matrix_buffer.slice(..));
 
-                render_pass.set_vertex_buffer(0, geometry.positions_buffer.slice(..));
-                render_pass.set_vertex_buffer(1, geometry.normals_buffer.slice(..));
+                let instances = batch.object_indices.len() as u32;
 
-                render_pass.set_index_buffer(geometry.index_buffer.slice(..));
-                render_pass.draw_indexed(0..geometry.index_count, 0, 0..1);
+                mesh_type.prepare_instances(&queue, &batch.object_indices);
+
+                render_pass.set_index_buffer(mesh_type.gpu_geometry.index_buffer.slice(..));
+                render_pass.draw_indexed(0..mesh_type.gpu_geometry.index_count, 0, 0..instances);
             }
 
             render_pass.pop_debug_group();

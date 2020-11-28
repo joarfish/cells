@@ -1,35 +1,39 @@
 use specs::prelude::*;
 use specs::Component;
-use wgpu::{util::*};
-
 
 use crate::scene::scene_graph::Transformation;
 
-use crate::renderer::meshes::{MeshResources, Mesh};
-use crate::scene::SceneInfo;
-use crate::scene::dynamic_objects::Color;
-use crate::renderer::utils::{GpuMatrix4BGA, GpuVector3BGA};
-use crate::scene::camera::OPENGL_TO_WGPU_MATRIX;
+use crate::renderer::meshes::{MeshResources, MeshType};
+use crate::renderer::utils::{GpuMatrix4BGA, GpuMatrix4};
+use crate::renderer::geometry::create_cube_geometry;
 
 
 #[derive(Component)]
 #[storage(FlaggedStorage)]
-pub struct StaticObject {
-    pub mesh: Mesh
+pub struct SolidObject {
+    pub mesh_type: u32,
+    pub object_index: u32,
+    pub material: u32
 }
 
 #[derive(Default)]
-pub struct StaticObjectsSystem {
-    mesh_pool: Option<u32>,
+pub struct SolidObjectSystem {
     reader: Option<ReaderId<ComponentEvent>>,
 }
 
-impl<'a> System<'a> for StaticObjectsSystem {
+impl SolidObjectSystem {
+    pub fn new() -> Self {
+        SolidObjectSystem {
+            reader: None
+        }
+    }
+}
+
+impl<'a> System<'a> for SolidObjectSystem {
     type SystemData = (
-        ReadStorage<'a, StaticObject>,
+        ReadStorage<'a, SolidObject>,
         ReadStorage<'a, Transformation>,
-        ReadStorage<'a, Color>,
-        ReadExpect<'a, MeshResources>,
+        WriteExpect<'a, MeshResources>,
         ReadExpect<'a, wgpu::Device>,
         ReadExpect<'a, wgpu::Queue>,
     );
@@ -41,15 +45,14 @@ impl<'a> System<'a> for StaticObjectsSystem {
         }
 
         let (
-            static_objects,
+            objects,
             transformations,
-            colors,
-            mesh_resources,
+            mut mesh_resources,
             device,
             queue
         ) = data;
 
-        let events = static_objects
+        let events = objects
             .channel()
             .read(self.reader.as_mut().unwrap());
 
@@ -72,12 +75,12 @@ impl<'a> System<'a> for StaticObjectsSystem {
             }
         }
 
-        for (static_object, transformation, color, _) in (&static_objects, &transformations, &colors, update_transform).join() {
+        for (object, transformation, _) in (&objects, &transformations, update_transform).join() {
             let position = transformation.position;
             let scale = transformation.scale;
             let rotation = transformation.rotation;
 
-            let matrix = GpuMatrix4BGA::new(
+            let matrix = GpuMatrix4::new(
                  cgmath::Matrix4::from_translation(cgmath::Vector3::new(position.x, position.y, position.z)) *
                     cgmath::Matrix4::from_nonuniform_scale(scale.x, scale.y, scale.z) *
                     cgmath::Matrix4::from_angle_x(rotation.x) *
@@ -85,34 +88,17 @@ impl<'a> System<'a> for StaticObjectsSystem {
                     cgmath::Matrix4::from_angle_z(rotation.z)
             );
 
-            let color_vector = GpuVector3BGA::new(
-                color.r,
-                color.g,
-                color.b
-            );
+            let mesh_type = mesh_resources.mesh_types.get_mut(object.mesh_type as usize).unwrap();
 
-            let mesh_pool = mesh_resources.mesh_pools
-                .get(static_object.mesh.pool_index as usize)
-                .unwrap();
-
-            mesh_pool.update_world_matrix(&device, &queue, static_object.mesh.object_index, &matrix);
-            mesh_pool.update_color(&device, &queue, static_object.mesh.object_index, &color_vector)
+            mesh_type.update_model_matrix(object.object_index, matrix);
         }
     }
 
     fn setup(&mut self, world: &mut World) {
         Self::SystemData::setup(world);
 
-        // Setup pool and create mesh:
-        let mut mesh_resources = world.write_resource::<MeshResources>();
-        let device = world.read_resource::<wgpu::Device>();
-        let mesh_pool = mesh_resources.add_pool(&device, 50);
-
-        let mut scene_info = world.write_resource::<SceneInfo>();
-        scene_info.static_objects_pool = mesh_pool;
-
         self.reader = Some(
-            WriteStorage::<StaticObject>::fetch(&world).register_reader()
+            WriteStorage::<SolidObject>::fetch(&world).register_reader()
         );
     }
 }

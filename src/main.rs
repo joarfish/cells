@@ -4,15 +4,14 @@ mod scene;
 
 use std::time::{Duration, Instant};
 use renderer::{renderer::RendererEvent, setup_rendering};
-use scene::{camera::{ActiveCamera, Camera, CameraSystem}, dynamic_objects::Color, dynamic_objects::{DynamicObjectsSystem, TransformationTests}, lights::{LightSystem, PointLight}, scene_graph::{SceneGraph, Transformation}, setup_scene, spawning::Spawner};
+use scene::{camera::{ActiveCamera, Camera, CameraSystem}, lights::{LightSystem, PointLight}, scene_graph::{SceneGraph, Transformation}, setup_scene, spawning::Spawner};
 use winit::{window::Window, event};
 use winit::event::WindowEvent;
 use winit::event_loop::ControlFlow;
 use winit::event_loop::EventLoop;
 use specs::prelude::*;
 use input::{InputMap, InputSystem};
-use crate::scene::static_objects::{StaticObjectsSystem, StaticObject};
-use crate::scene::SceneInfo;
+use crate::scene::solid_object::{SolidObject, SolidObjectSystem};
 use crate::renderer::meshes::MeshResources;
 use crate::scene::playing_field::PlayingField;
 
@@ -60,13 +59,11 @@ fn main() {
 
     let mut dispatcher = DispatcherBuilder::new()
         .with(CameraSystem, "Camera System", &[])
-        .with(TransformationTests, "Transformation Tests", &[])
-        .with(DynamicObjectsSystem::default(), "DynamicObjectsSystem", &[])
-        .with(StaticObjectsSystem::default(), "StaticObjectsSystem", &[])
         .with(Spawner::default(), "Test Spawner", &[])
         .with(SceneGraph::default(), "Scene", &[])
         .with(LightSystem::default(), "Light System", &[])
-        .with(PlayingField::new(), "Playing Field System", &["StaticObjectsSystem"])
+        .with(SolidObjectSystem::new(), "Solid Objects System", &[])
+        .with(PlayingField::new(), "Playing Field System", &["Solid Objects System"])
         .with(InputSystem, "InputSystem", &["Camera System"])
         .with_thread_local(renderer)
         .build();

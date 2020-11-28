@@ -2,8 +2,8 @@ use specs::prelude::*;
 
 use crate::{input::{InputMap, KeyState}, renderer::{meshes::MeshResources, geometry::create_cube_geometry}};
 
-use super::{dynamic_objects::{Color, DynamicObject}, scene_graph::Transformation};
-use crate::scene::SceneInfo;
+use super::{scene_graph::Transformation};
+use crate::scene::solid_object::SolidObject;
 
 pub struct Spawner {
     last_spawned: std::time::Instant,
@@ -23,10 +23,7 @@ impl<'a> System<'a> for Spawner {
     type SystemData = (
         WriteExpect<'a, MeshResources>,
         Entities<'a>,
-        WriteStorage<'a, DynamicObject>,
-        WriteStorage<'a, Color>,
         WriteStorage<'a, Transformation>,
-        ReadExpect<'a, SceneInfo>,
         ReadExpect<'a, InputMap>
     );
 
@@ -34,10 +31,7 @@ impl<'a> System<'a> for Spawner {
         let (
             mut mesh_resources,
             entities,
-            mut dynamic_objects,
-            mut colors,
             mut transformations,
-            scene_info,
             input_map
         ) = data;
 
@@ -58,12 +52,11 @@ impl<'a> System<'a> for Spawner {
             let sx = rng.gen_range(0.25, 3.0);
             let sz = rng.gen_range(0.25, 3.0);
 
-            let mesh = mesh_resources.create_mesh(self.cube_geo_index, scene_info.dynamic_objects_pool as u16);
-            log::info!("Created Static Object with Mesh: object_index={}, geometry_index={}, pool_index={}", mesh.object_index, mesh.geometry_index, mesh.pool_index);
+           /* let mesh = mesh_resources.add_mesh_type();
 
             entities.build_entity()
                 .with(
-                    DynamicObject {
+                    SolidObject {
                         mesh
                     },
                     &mut dynamic_objects
@@ -76,10 +69,7 @@ impl<'a> System<'a> for Spawner {
                     },
                     &mut transformations
                 )
-                .with(Color { r, g, b},
-                    &mut colors
-                )
-                .build();
+                .build();*/
 
             self.last_spawned = now;
         }
@@ -91,6 +81,6 @@ impl<'a> System<'a> for Spawner {
         let mut mesh_resources = world.write_resource::<MeshResources>();
         let device = world.read_resource::<wgpu::Device>();
         let cube_geometry = create_cube_geometry();
-        self.cube_geo_index = mesh_resources.add_geometry(&device, &cube_geometry) as u32;
+       // self.cube_geo_index = mesh_resources.add_geometry(&device, &cube_geometry) as u32;
     }
 }
