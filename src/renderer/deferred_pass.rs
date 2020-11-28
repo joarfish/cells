@@ -214,7 +214,7 @@ impl DeferredPass {
             void main() {
                 f_position = world_position;
                 f_normal = vec4(normalize(normal) * 0.5 + 0.5, 1.0);
-                f_albedo = material.primary;
+                f_albedo = mat4(material.primary, material.secondary, material.tertiary, material.quaternary)[part_id];
             }
         ".to_string();
         

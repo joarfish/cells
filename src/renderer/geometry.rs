@@ -73,7 +73,20 @@ pub fn create_cube_geometry() -> Geometry {
             GpuVector3::new( 1.0, 0.0, 0.0), // 22
             GpuVector3::new( 1.0, 0.0, 0.0) // 23
         ],
-        part_ids: vec![0; 24],
+        part_ids: vec![
+            // Front
+            0, 0, 0, 0,
+            // Back
+            0, 0, 0, 0,
+            // Top
+            1, 1, 1, 1,
+            // Bottom
+            0, 0, 0, 0,
+            // Left
+            0, 0, 0, 0,
+            // Right
+            0, 0, 0, 0,
+        ],
         indices: vec![
             // Front
             0, 2, 1,        0, 3, 2,
