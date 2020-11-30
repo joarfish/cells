@@ -75,7 +75,7 @@ impl<'a> System<'a> for PlayingField {
 
                     transforms.push(
                         Transformation {
-                            position: cgmath::Point3::new(x as f32, -1.0, z as f32),
+                            position: cgmath::Point3::new(x as f32, -0.125, z as f32),
                             rotation: cgmath::Euler { x: cgmath::Deg(0.0), y: cgmath::Deg(0.0), z: cgmath::Deg(0.0) },
                             scale: cgmath::Point3::new(0.9, 0.25, 0.9)
                         }

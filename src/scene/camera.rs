@@ -5,6 +5,7 @@ use specs::prelude::*;
 use specs::{Component, System, VecStorage, WriteStorage};
 use winit::dpi::PhysicalSize;
 use crate::renderer::scene_base::GpuSceneBase;
+use crate::scene::scene_graph::SceneResources;
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -71,7 +72,7 @@ impl<'a> System<'a> for CameraSystem {
         ReadExpect<'a, DeltaTimer>,
         ReadExpect<'a, InputMap>,
         ReadExpect<'a, SceneBaseResources>,
-        ReadExpect<'a, wgpu::Device>,
+        ReadExpect<'a, SceneResources>,
         ReadExpect<'a, wgpu::Queue>
     );
 
@@ -83,34 +84,59 @@ impl<'a> System<'a> for CameraSystem {
             delta_timer,
             input_map,
             scene_base_resources,
-            device,
+            scene_resources,
             queue
         ) = data;
 
         let d = delta_timer.get_duration_f32();
-        let speed = 1.25;
+        let speed = 4.5;
         let zoom_speed = 10.0;
 
-        let d_position = cgmath::Point3::new(
-            speed * d * match input_map.key_d { KeyState::Pressed => -1.0, _ => 0.0 } + 
-            speed * d * match input_map.key_a { KeyState::Pressed => 1.0, _ => 0.0 },
-            input_map.wheel * zoom_speed * d,
-            speed * d * match input_map.key_w { KeyState::Pressed => -1.0, _ => 0.0 } + 
-            speed * d * match input_map.key_s { KeyState::Pressed => 1.0, _ => 0.0 }
-        );
-
         if let Some(camera) = cameras.get_mut((*active_camera).0) {
-            camera.position = camera.position.add_element_wise(d_position);
-            camera.target = camera.target.add_element_wise(d_position);
 
-            let updated_view_matrix = camera.build_view_matrix();
-            let updated_projection_matrix = camera.build_projection_matrix();
+            let d_left = match input_map.key_d { KeyState::Pressed => -1.0, _ => 0.0 } +
+                speed * d * match input_map.key_a { KeyState::Pressed => 1.0, _ => 0.0 };
+            let d_front = match input_map.key_w { KeyState::Pressed => 1.0, _ => 0.0 } +
+                speed * d * match input_map.key_s { KeyState::Pressed => -1.0, _ => 0.0 };
 
-            scene_base_resources.update_scene_base(&queue, GpuSceneBase {
-                view_matrix: updated_view_matrix,
-                projection_matrix: updated_projection_matrix,
-                window_size: cgmath::Vector2::new( 1024.0 as f32, 768.0)
-            });
+            let front = camera.target.sub_element_wise(camera.position)
+                .to_vec()
+                .mul_element_wise(
+                    cgmath::Vector3::new(1.0, 0.0, 1.0) // zero y axis because we want to stay on one plane
+                )
+                .normalize();
+            let left = front.cross(camera.up).normalize();
+
+            let d_position = front
+                .mul_element_wise(d_front)
+                .add_element_wise(
+                    left.mul_element_wise(d_left)
+                )
+                .add_element_wise(
+                    cgmath::Vector3::new(0.0, input_map.wheel * zoom_speed * d, 0.0)
+                )
+                .normalize()
+                .mul_element_wise(speed * d);
+
+            if d_position.is_finite() {
+                camera.position= camera.position.add_element_wise(cgmath::Point3::new(d_position.x, d_position.y, d_position.z));
+                camera.target = camera.target.add_element_wise(cgmath::Point3::new(d_position.x, d_position.y, d_position.z));
+
+                let near = scene_resources.extend.shortest_distance(camera.position);
+                let far = scene_resources.extend.farthest_distance(camera.position);
+
+                camera.znear = near;
+                camera.zfar = far;
+
+                let updated_view_matrix = camera.build_view_matrix();
+                let updated_projection_matrix = camera.build_projection_matrix();
+
+                scene_base_resources.update_scene_base(&queue, GpuSceneBase {
+                    view_matrix: updated_view_matrix,
+                    projection_matrix: updated_projection_matrix,
+                    window_size: cgmath::Vector2::new( 1024.0 as f32, 768.0)
+                });
+            }
         }
     }
 }

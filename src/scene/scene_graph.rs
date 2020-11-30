@@ -5,6 +5,7 @@ use crate::renderer::command_queue::{CommandQueue, RenderMeshCommand, RenderBatc
 
 use crate::renderer::shadow_passes::{RenderShadowMeshCommand, RenderShadowBatch};
 use crate::scene::solid_object::SolidObject;
+use crate::renderer::utils::AABB;
 
 #[derive(Component)]
 pub struct Visible;
@@ -28,6 +29,10 @@ pub struct Parent(Option<Entity>);
 struct TeeNode {
     id: u32,
     parent: u32
+}
+
+pub struct SceneResources {
+    pub extend: AABB
 }
 
 /// The Scene Graph represents the hierarchical structure of the scene objects.

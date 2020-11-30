@@ -63,7 +63,7 @@ impl CompositionPass {
             layout(location=0) out vec2 tex_coord;
     
             void main() {
-                tex_coord = (a_position.xy + vec2(1.0,1.0)) * vec2(0.5, 0.5);
+                tex_coord = (vec2(0.0,1.0) - a_position.xy + vec2(1.0,0.0)) * vec2(0.5, 0.5);
                 gl_Position = vec4(a_position, 1.0);
             }        
         ".to_string();

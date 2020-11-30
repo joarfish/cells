@@ -1,4 +1,4 @@
-use cgmath::Zero;
+use cgmath::{Zero, ElementWise};
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -99,4 +99,66 @@ impl GpuVector3BGA {
 }
 
 unsafe impl bytemuck::Pod for GpuVector3BGA {}
-unsafe impl bytemuck::Zeroable for GpuVector3BGA {} 
+unsafe impl bytemuck::Zeroable for GpuVector3BGA {}
+
+fn max3(a: f32, b: f32, c: f32) -> f32 {
+    if a > b {
+        if a > c {
+            a
+        } else {
+            c
+        }
+    } else {
+        if b > c {
+            b
+        } else {
+            c
+        }
+    }
+}
+
+fn min3(a: f32, b: f32, c: f32) -> f32 {
+    if a < b {
+        if a < c {
+            a
+        } else {
+            c
+        }
+    } else {
+        if b < c {
+            b
+        } else {
+            c
+        }
+    }
+}
+
+pub struct AABB {
+    pub min: cgmath::Point3<f32>,
+    pub max: cgmath::Point3<f32>,
+}
+
+impl AABB {
+    pub fn new(min: cgmath::Point3<f32>, max: cgmath::Point3<f32>) -> Self {
+        AABB {
+            min,
+            max
+        }
+    }
+
+    pub fn shortest_distance(&self, point: cgmath::Point3<f32>) -> f32 {
+        let dx = max3(self.min.x - point.x, 0.0, point.x - self.max.x);
+        let dy = max3(self.min.y - point.y, 0.0, point.y - self.max.y);
+        let dz = max3(self.min.z - point.z, 0.0, point.z - self.max.z);
+
+        (dx*dx + dy*dy + dz*dz).sqrt()
+    }
+
+    pub fn farthest_distance(&self, point: cgmath::Point3<f32>) -> f32 {
+        let dx = min3(self.min.x - point.x, 0.0, point.x - self.max.x);
+        let dy = min3(self.min.y - point.y, 0.0, point.y - self.max.y);
+        let dz = min3(self.min.z - point.z, 0.0, point.z - self.max.z);
+
+        (dx*dx + dy*dy + dz*dz).sqrt()
+    }
+}

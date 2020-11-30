@@ -82,7 +82,7 @@ impl<'a> System<'a> for InputSystem {
         let (mut input_map, timer) = data;
         let d = timer.get_duration_f32();
         let abs_wheel = input_map.wheel.abs();
-        let wheel_dampening = cubic_bezier(0.43,0.75, 0.59,1.0, 1.0-abs_wheel) * d * 50.0; // per sec?
+        let wheel_dampening = cubic_bezier(0.43,0.75, 0.59,1.0, 1.0-abs_wheel) * d * 15.0; // per sec?
         input_map.wheel *= wheel_dampening;
     }
 }
