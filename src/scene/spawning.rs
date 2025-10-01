@@ -1,3 +1,4 @@
+use rand::Rng;
 use specs::prelude::*;
 
 use crate::{input::{InputMap, KeyState}, renderer::{meshes::MeshResources, geometry::create_cube_geometry}};
@@ -41,16 +42,16 @@ impl<'a> System<'a> for Spawner {
 
             use rand::Rng;
 
-            let mut rng = rand::thread_rng();
-            let x = rng.gen_range(-5.0, 5.0);
-            let y = 0.0;//rng.gen_range(-2.0, 2.0);
-            let z = rng.gen_range(-5.0, 5.0);
-            let r = 1.0; // rng.gen_range(0.0, 1.0);
-            let g = 1.0; // rng.gen_range(0.0, 1.0);
-            let b = 1.0; // rng.gen_range(0.0, 1.0);
+            let mut rng = rand::rng();
+            let x = rng.random_range(-5.0..=5.0);
+            let y = 0.0;//rng.random_range(-2.0..2.0);
+            let z = rng.random_range(-5.0..5.0);
+            let r = 1.0; // rng.random_range(0.0..1.0);
+            let g = 1.0; // rng.random_range(0.0..1.0);
+            let b = 1.0; // rng.random_range(0.0..1.0);
 
-            let sx = rng.gen_range(0.25, 3.0);
-            let sz = rng.gen_range(0.25, 3.0);
+            let sx = rng.random_range(0.25..3.0);
+            let sz = rng.random_range(0.25..3.0);
 
            /* let mesh = mesh_resources.add_mesh_type();
 

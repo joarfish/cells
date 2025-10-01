@@ -134,7 +134,8 @@ impl<'a> System<'a> for CameraSystem {
                 scene_base_resources.update_scene_base(&queue, GpuSceneBase {
                     view_matrix: updated_view_matrix,
                     projection_matrix: updated_projection_matrix,
-                    window_size: cgmath::Vector2::new( 1024.0 as f32, 768.0)
+                    window_size: cgmath::Vector2::new(1024.0, 768.0),
+                    padding: cgmath::Vector2::new(0.0, 0.0)
                 });
             }
         }

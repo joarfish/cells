@@ -43,11 +43,11 @@ impl DeltaTimer {
     }
 }
 
-pub fn setup_rendering(world: &mut World, window: &winit::window::Window) -> Renderer {
+pub fn setup_rendering(world: &mut World, window: std::sync::Arc<winit::window::Window>) -> Renderer {
 
     let window_size = window.inner_size();
 
-    let (renderer, device, queue) = futures::executor::block_on(Renderer::new(&window));
+    let (renderer, device, queue) = futures::executor::block_on(Renderer::new(window));
 
     let mesh_resources = MeshResources::new();
     let lights_resources = LightsResources::new(&device);

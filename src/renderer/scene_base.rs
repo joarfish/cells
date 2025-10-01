@@ -8,6 +8,7 @@ pub struct GpuSceneBase {
     pub view_matrix: cgmath::Matrix4<f32>,
     pub projection_matrix: cgmath::Matrix4<f32>,
     pub window_size: cgmath::Vector2<f32>,
+    pub padding: cgmath::Vector2<f32>,
 }
 
 impl GpuSceneBase {
@@ -15,7 +16,8 @@ impl GpuSceneBase {
         GpuSceneBase {
             view_matrix,
             projection_matrix,
-            window_size
+            window_size,
+            padding: cgmath::Vector2::new(0.0, 0.0)
         }
     }
 
@@ -23,7 +25,8 @@ impl GpuSceneBase {
         GpuSceneBase {
             view_matrix: cgmath::Matrix4::zero(),
             projection_matrix: cgmath::Matrix4::zero(),
-            window_size: cgmath::Vector2::new(0.0, 0.0)
+            window_size: cgmath::Vector2::new(0.0, 0.0),
+            padding: cgmath::Vector2::new(0.0, 0.0)
         }
     }
 }
@@ -47,9 +50,10 @@ impl SceneBaseResources {
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
-                    ty: wgpu::BindingType::UniformBuffer {
-                        dynamic: false,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
                         min_binding_size: None,
                     },
                     count: None,
@@ -60,7 +64,7 @@ impl SceneBaseResources {
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             contents: bytemuck::cast_slice(&[GpuSceneBase::empty()]),
             label: Some("ViewMatrixBuffer"),
-            usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -68,7 +72,7 @@ impl SceneBaseResources {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer(buffer.slice(0..)),
+                    resource: wgpu::BindingResource::Buffer(buffer.as_entire_buffer_binding()),
                 },
             ],
             layout: &bind_group_layout,

@@ -28,7 +28,7 @@ impl MeshType {
         let model_matrix_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!("ModelMatrixBuffer: {}", name)),
             size: (capacity * std::mem::size_of::<GpuMatrix4>()) as u64,
-            usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false
         });
 
@@ -37,25 +37,25 @@ impl MeshType {
             let positions_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Position Buffer"),
                 contents: bytemuck::cast_slice(&geometry.vertices),
-                usage: wgpu::BufferUsage::VERTEX
+                usage: wgpu::BufferUsages::VERTEX
             });
 
             let normals_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Normal Buffer"),
                 contents: bytemuck::cast_slice(&geometry.normals),
-                usage: wgpu::BufferUsage::VERTEX
+                usage: wgpu::BufferUsages::VERTEX
             });
 
             let parts_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Parts Buffer"),
                 contents: bytemuck::cast_slice(&geometry.part_ids),
-                usage: wgpu::BufferUsage::VERTEX
+                usage: wgpu::BufferUsages::VERTEX
             });
 
             let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Index Buffer"),
                 contents: bytemuck::cast_slice(&geometry.indices),
-                usage: wgpu::BufferUsage::INDEX
+                usage: wgpu::BufferUsages::INDEX
             });
 
             GpuGeometry {

@@ -75,8 +75,6 @@ impl Batch<RenderMeshCommand> for RenderBatch {
     }
 }
 
-///////////////////////
-
 pub trait Batch<T: Command> {
     fn new(first_command: T) -> Self;
     fn add_command(&mut self, command: &T) -> bool;

@@ -36,7 +36,7 @@ impl LightsResources {
         let lights_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Point Lights Buffer"),
             contents: bytemuck::cast_slice(&lights_data),
-            usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::UNIFORM
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM
         });
 
         let lights_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -44,10 +44,11 @@ impl LightsResources {
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStage::FRAGMENT | wgpu::ShaderStage::VERTEX,
-                    ty: wgpu::BindingType::UniformBuffer {
-                        dynamic: false,
-                        min_binding_size: None//wgpu::BufferSize::new((std::mem::size_of::<GpuLight>() * 20) as wgpu::BufferAddress)
+                    visibility: wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        min_binding_size: None,//wgpu::BufferSize::new((std::mem::size_of::<GpuLight>() * 20) as wgpu::BufferAddress)
+                        has_dynamic_offset: false
                     },
                     count: None
                 },
@@ -60,7 +61,7 @@ impl LightsResources {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer(lights_buffer.slice(..))
+                    resource: wgpu::BindingResource::Buffer(lights_buffer.as_entire_buffer_binding())
                 }
             ]
         });
@@ -88,7 +89,7 @@ impl LightsResources {
                 contents: bytemuck::cast_slice(&[
                     light
                 ]),
-                usage: wgpu::BufferUsage::COPY_SRC
+                usage: wgpu::BufferUsages::COPY_SRC
             }),
             0,
             &self.lights_buffer,
