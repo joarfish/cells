@@ -39,7 +39,7 @@ impl Renderer {
     ) -> (Self, wgpu::Device, wgpu::Queue) {
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
-            ..wgpu::InstanceDescriptor::default()
+            ..std::default::Default::default()
         });
         let size = window.inner_size();
         let surface = instance.create_surface(window.clone()).unwrap();
@@ -92,7 +92,7 @@ impl Renderer {
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::Fifo,
+            present_mode: surface_caps.present_modes[0],
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,

@@ -49,7 +49,7 @@ impl CompositionPass {
 
         let indices = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Comp Pass Index Buffer"),
-            contents: bytemuck::cast_slice(&[0 as u16, 2, 3, 0, 1, 2]),
+            contents: bytemuck::cast_slice(&[0u16, 2, 3, 0, 1, 2]),
             usage: wgpu::BufferUsages::INDEX,
         });
 
@@ -210,9 +210,11 @@ impl CompositionPass {
                     }
                 }
 
-                f_color = color * shadow_f * f_occlusion;
+                f_color = color * f_occlusion;
+                //f_color = color * shadow_f * f_occlusion;
                 //f_color = color * shadow_f;
                 //f_color = vec4(1.0, 1.0, 1.0, 1.0) * shadow_f * f_occlusion;
+                //f_color = vec4(0.0, 1.0, 0.0, 1.0);
             }
         ".to_string();
 
@@ -267,7 +269,7 @@ impl CompositionPass {
                 entry_point: Some("main"),
                 compilation_options: Default::default(),
                 buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: 0,
+                    array_stride: wgpu::VertexFormat::Float32x3.size() as wgpu::BufferAddress,
                     step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &[wgpu::VertexAttribute {
                         offset: 0,
@@ -280,9 +282,9 @@ impl CompositionPass {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                polygon_mode: Default::default(),
-                unclipped_depth: true,
+                cull_mode: None,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
                 conservative: false,
             },
             depth_stencil: None,
@@ -344,8 +346,8 @@ impl CompositionPass {
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
                             r: 0.5,
-                            g: 0.0,
-                            b: 0.0,
+                            g: 0.5,
+                            b: 0.5,
                             a: 1.0,
                         }),
                         store: wgpu::StoreOp::Store,
@@ -370,5 +372,6 @@ impl CompositionPass {
         }
 
         queue.submit(std::iter::once(encoder.finish()));
+        screen_frame.present();
     }
 }

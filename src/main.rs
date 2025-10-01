@@ -21,7 +21,7 @@ use winit::application::ApplicationHandler;
 use winit::event::{KeyEvent, WindowEvent};
 use winit::event_loop::EventLoop;
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
-use winit::keyboard::NamedKey;
+use winit::keyboard::{KeyCode, NamedKey};
 use winit::window::WindowId;
 use winit::{event, keyboard, window::Window};
 
@@ -175,7 +175,7 @@ impl<'a, 'b> ApplicationHandler for App<'a, 'b> {
             WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {
-                        logical_key: keyboard::Key::Named(NamedKey::Escape),
+                        physical_key: keyboard::PhysicalKey::Code(KeyCode::Escape),
                         state: event::ElementState::Pressed,
                         ..
                     },
@@ -241,13 +241,6 @@ impl<'a, 'b> ApplicationHandler for App<'a, 'b> {
                 }
             }
             _ => {}
-        }
-    }
-
-    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        if let Some(world) = &mut self.world {
-            let window = world.read_resource::<std::sync::Arc<Window>>();
-            window.request_redraw();
         }
     }
 }

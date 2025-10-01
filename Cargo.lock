@@ -321,6 +321,7 @@ dependencies = [
  "log",
  "rand",
  "shaderc",
+ "shaderc-sys",
  "specs",
  "wgpu",
  "winit",

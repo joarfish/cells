@@ -119,13 +119,13 @@ impl<'a> System<'a> for CameraSystem {
                 .mul_element_wise(speed * d);
 
             if d_position.is_finite() {
-                camera.position= camera.position.add_element_wise(cgmath::Point3::new(d_position.x, d_position.y, d_position.z));
+                camera.position = camera.position.add_element_wise(cgmath::Point3::new(d_position.x, d_position.y, d_position.z));
                 camera.target = camera.target.add_element_wise(cgmath::Point3::new(d_position.x, d_position.y, d_position.z));
+            }
 
-                let near = scene_resources.extend.shortest_distance(camera.position);
-                let far = scene_resources.extend.farthest_distance(camera.position);
-
-                camera.znear = near;
+            let near = scene_resources.extend.shortest_distance(camera.position);
+            let far = scene_resources.extend.farthest_distance(camera.position);
+            camera.znear = near;
                 camera.zfar = far;
 
                 let updated_view_matrix = camera.build_view_matrix();
@@ -137,7 +137,6 @@ impl<'a> System<'a> for CameraSystem {
                     window_size: cgmath::Vector2::new(1024.0, 768.0),
                     padding: cgmath::Vector2::new(0.0, 0.0)
                 });
-            }
         }
     }
 }
